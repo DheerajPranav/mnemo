@@ -1,0 +1,149 @@
+<meta charset="utf-8">
+<title>Architecture — Conversational Memory Intelligence System</title>
+<link rel="stylesheet" href="../../_build/print.css">
+<style>
+  .diagram { border: 1px solid var(--rule); border-radius: 6px; padding: 14px 12px; margin: 0 0 14px; break-inside: avoid; }
+  .lane { margin-bottom: 12px; }
+  .lane:last-child { margin-bottom: 0; }
+  .lane-label { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 7.2pt; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); font-weight: 700; margin-bottom: 6px; }
+  .flow { display: flex; align-items: stretch; flex-wrap: wrap; gap: 0; }
+  .node { flex: 1 1 0; min-width: 78px; border: 1.2px solid var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 6px 7px; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .node .n-title { font-size: 8.2pt; font-weight: 700; color: var(--ink); line-height: 1.2; }
+  .node .n-cap { font-size: 6.6pt; color: var(--accent); letter-spacing: 0.04em; margin-top: 2px; }
+  .node.store { border-color: #5a6b7a; background: #eef1f4; }
+  .node.store .n-cap { color: #45535f; }
+  .node.gate { border-color: #8a6014; background: var(--warn-bg); }
+  .node.gate .n-cap { color: #8a6014; }
+  .arrow-h { align-self: center; color: var(--accent); font-weight: 700; font-size: 11pt; padding: 0 4px; }
+  .cross { display: flex; gap: 8px; margin-top: 4px; }
+  .cross .node { border-color: #66427a; background: #f4eef7; }
+  .cross .node .n-cap { color: #66427a; }
+  .tb { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 7pt; font-weight: 700; color: #8a2e2e; letter-spacing: 0.06em; text-transform: uppercase; margin: 2px 0 6px; }
+</style>
+
+<div class="title-block">
+  <p class="eyebrow">Learning Through Reconstruction &middot; Deliverable 4</p>
+  <h1>Architecture</h1>
+  <p class="subtitle">Component decomposition of the conversational-memory system, and how each component earns its place.</p>
+  <div class="meta-grid">
+    <div><b>System</b> Conversational Memory Intelligence System</div>
+    <div><b>Author</b> Dheeraj Pranav</div>
+    <div><b>Companion</b> system_design.pdf &middot; data_flow.pdf</div>
+    <div><b>Date</b> 22 July 2026</div>
+  </div>
+</div>
+
+<h2>1. Component diagram</h2>
+
+<div class="diagram">
+  <div class="lane">
+    <div class="lane-label">Write path &nbsp;·&nbsp; TB-1 admission boundary (untrusted → typed &amp; PII-screened)</div>
+    <div class="tb">▸ nothing crosses into storage until typed (C3) and PII-screened (C2)</div>
+    <div class="flow">
+      <div class="node"><div class="n-title">Extractor</div><div class="n-cap">C1 · C3 · LLM</div></div>
+      <div class="arrow-h">→</div>
+      <div class="node gate"><div class="n-title">PII Gate</div><div class="n-cap">C2 · F11 · Presidio</div></div>
+      <div class="arrow-h">→</div>
+      <div class="node gate"><div class="n-title">Op-Selector</div><div class="n-cap">C2 · C7 · F8</div></div>
+      <div class="arrow-h">→</div>
+      <div class="node"><div class="n-title">Committer</div><div class="n-cap">C3 · C7 · F4 txn</div></div>
+    </div>
+  </div>
+
+  <div class="lane">
+    <div class="lane-label">Stores &nbsp;·&nbsp; single Postgres instance (ADR-005)</div>
+    <div class="flow">
+      <div class="node store"><div class="n-title">memory (source of truth)</div><div class="n-cap">C4 · typed facts + validity + provenance</div></div>
+      <div class="arrow-h">⇄</div>
+      <div class="node store"><div class="n-title">memory_embedding (index)</div><div class="n-cap">C4 · derived pgvector projection</div></div>
+    </div>
+  </div>
+
+  <div class="lane">
+    <div class="lane-label">Read path &nbsp;·&nbsp; TB-2 isolation boundary (no cross-tenant read path exists)</div>
+    <div class="tb">▸ tenant_id enforced by RLS + repository scope (C8) — not a caller filter</div>
+    <div class="flow">
+      <div class="node"><div class="n-title">Retriever</div><div class="n-cap">C5 · C8 · valid-only ANN</div></div>
+      <div class="arrow-h">→</div>
+      <div class="node"><div class="n-title">Multi-signal Ranker</div><div class="n-cap">C5 · rel+rec+imp+conf</div></div>
+      <div class="arrow-h">→</div>
+      <div class="node"><div class="n-title">Context Constructor</div><div class="n-cap">C6 · F2/F3 · budget+abstain</div></div>
+      <div class="arrow-h">→</div>
+      <div class="node"><div class="n-title">→ agent context</div><div class="n-cap">≤ 2000 tokens</div></div>
+    </div>
+  </div>
+
+  <div class="lane">
+    <div class="lane-label">Cross-cutting &nbsp;·&nbsp; every stage of both paths</div>
+    <div class="cross">
+      <div class="node"><div class="n-title">Observability / Trace</div><div class="n-cap">C9 · P7 · per-request events</div></div>
+      <div class="node"><div class="n-title">Lifecycle Jobs</div><div class="n-cap">C7 · consolidate/decay/expire/delete</div></div>
+      <div class="node"><div class="n-title">Eval Harness</div><div class="n-cap">C10 · P8 · 3-arm vs baseline</div></div>
+    </div>
+  </div>
+</div>
+
+<p class="small">Blue = processing components; grey = stores; amber = admission gates (TB-1); purple =
+cross-cutting. The <span class="mono">⇄</span> between stores is the C4 projection relation: the index
+is rebuilt from the source of truth, and deletion cascades across both in one transaction.</p>
+
+<h2>2. Why each component exists (traceability)</h2>
+
+<p>The handbook completion standard requires that every component correspond to a requirement,
+invariant, or measured failure. This is that mapping — no orphan components, no unaddressed failures.</p>
+
+<table class="tight">
+  <thead><tr><th style="width:20%">Component</th><th style="width:14%">Capability</th><th style="width:16%">Fixes / measured</th><th>Forced by</th></tr></thead>
+  <tbody>
+    <tr><td><b>Extractor</b></td><td>C1, C3</td><td>F1, F7</td><td>P1 (nothing persists), P3 (chunks aren't facts)</td></tr>
+    <tr><td><b>PII Gate</b></td><td>C2</td><td>F11 · <i>D3: 3 exposures</i></td><td>P6 (ineligible data exists; hard gate only)</td></tr>
+    <tr><td><b>Op-Selector</b></td><td>C2, C7</td><td>F8 · <i>D3: 0.556 wasted</i></td><td>P3 (redundancy is a policy problem)</td></tr>
+    <tr><td><b>Committer</b></td><td>C3, C7</td><td>F4 · <i>D3: 0.80</i></td><td>P4 (validity + supersession, ADR-001)</td></tr>
+    <tr><td><b>memory store</b></td><td>C4</td><td>F9</td><td>P6, P8 (authoritative + rebuildable)</td></tr>
+    <tr><td><b>embedding index</b></td><td>C4</td><td>&mdash;</td><td>P8 (re-projection, not migration)</td></tr>
+    <tr><td><b>Retriever</b></td><td>C5, C8</td><td>F10 · <i>D3: 7/11 leaked</i></td><td>P5 (isolation invariant, ADR-005)</td></tr>
+    <tr><td><b>Ranker</b></td><td>C5</td><td>F4, F8</td><td>P3, P4 (similarity ≠ validity)</td></tr>
+    <tr><td><b>Constructor</b></td><td>C6</td><td>F2, F3 · <i>D3: cold-start 2/2</i></td><td>P2 (finite, position-sensitive context)</td></tr>
+    <tr><td><b>Observability</b></td><td>C9</td><td>all (indirectly)</td><td>P7 (decisions invisible in output)</td></tr>
+    <tr><td><b>Lifecycle Jobs</b></td><td>C7</td><td>F1, F6, F9</td><td>P4, P6, P3</td></tr>
+    <tr><td><b>Eval Harness</b></td><td>C10</td><td>credibility of all</td><td>P8 (quality is distributional)</td></tr>
+  </tbody>
+</table>
+
+<h2>3. The two boundaries that carry the safety posture</h2>
+
+<div class="kv"><dl>
+  <dt>TB-1 — Admission (write path)</dt>
+  <dd>Untrusted conversation becomes stored state only after extraction (typed, resolved) and a
+  <b>hard</b> PII gate. There is deliberately <b>no</b> post-storage redaction path: by the time data
+  is on the output it is already in the index and backups (P6). The gate is the only correct place.</dd>
+  <dt>TB-2 — Isolation (read path)</dt>
+  <dd>Stated as <b>"no query path can express a cross-tenant read,"</b> not "every path filters" (C8).
+  Two enforcement layers (RLS + constructor-scoped repository) mean an application bug is caught by the
+  database and an RLS misconfig is caught by the code shape. D3 measured why this must be structural:
+  the naive filter-mindset leaked on 7/11 queries, and better similarity makes near-duplicate foreign
+  memories <i>more</i> retrievable, not less.</dd>
+</dl></div>
+
+<h2>4. Sequence sketch (detailed data-flow → data_flow.pdf)</h2>
+
+<pre>
+WRITE   turn(s) ─▶ Extract ─▶ PII-screen ─▶ Op-select(store|update|discard)
+                                                   │ update → supersession txn
+                                                   ▼
+                                          memory (+ cascade embedding)         ── trace ▶ /trace
+
+READ    query ─▶ tenant-scoped ANN (valid-only) ─▶ rank(4 signals) ─▶ budget/abstain ─▶ inject
+                                                                              │
+                                                                              └─ access_log ▶ audit
+</pre>
+
+<p class="small">This is the component-level flow; the full request/response sequence diagrams, the
+op-selector decision tree, and the deletion cascade timing go in <span class="mono">data_flow.pdf</span>
+(next artifact). Data structures for each edge are in <span class="mono">data_model.md</span>; the call
+contracts in <span class="mono">api_contracts.md</span>.</p>
+
+<hr class="footnote-rule">
+<p class="small"><b>AI assistance disclosure.</b> Claude helped render this architecture. The
+decomposition, the boundary choices, and the traceability mapping are mine and are what I will defend
+in review.</p>

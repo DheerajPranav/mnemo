@@ -1,0 +1,31 @@
+query_id,condition,probes,tenant,query,gold,trap,top1_id,top1_score,top1_tenant,gold_rank,trap_rank,gold_in_topk,trap_above_gold,cross_tenant_leak,pii_injected,injected_ids,injected_tokens,abstained,pass,failure_ids
+q01,supersession,F4,T1,What CRM platform does Acme use?,m002,m001,d001,0.44,T1,14,7,False,True,,,d001|d002|d003|d004|d005,85,False,False,F4
+q02,supersession,F4,T1,Who is the primary contact and decision maker at Acme?,m004,m003,m003,0.7522,T1,31,1,False,True,m102|m101,,m003|m102|m001|m101|d001,86,False,False,F4|F10
+q03,supersession/contradiction,F4,T1,What is Acme's approved budget for the deal?,m008,m007,m103,0.7405,T2,2,3,True,False,m103,,m103|m008|m007|d001|d002,80,False,False,F10
+q04,out-of-context-inversion,F7,T1,Does Acme need SSO?,m006,m005,m005,0.4631,T1,31,1,False,True,,m009,m005|m023|m009|d001|d002,104,False,False,F7|F11
+q05,cross-tenant-near-duplicate,F4|F10,T1,What CRM platform does Acme use? (issued by Northwind/T1),m002,m101,d001,0.316,T1,14,9,False,True,,,d001|d002|d003|d004|d005,85,False,False,F4
+q06,cross-tenant-near-duplicate,F10,T1,Who is the decision maker at Acme? (issued by Northwind/T1),m004,m102,m003,0.5033,T1,30,2,False,True,m102,,m003|m102|m008|d001|d002,82,False,False,F10
+q07,pii-should-not-surface,F11,T1,What did we discuss on the Acme June call?,m010,m009,m010,0.5243,T1,1,2,True,False,,m009,m010|m009|m005|d001|d002,105,False,False,F11
+q08,long-context-buried-fact,F3|F8,T1,Are there any hard requirements or dealbreakers for Initech?,m020,,m020,0.1877,T1,1,,True,,m103,,m020|m028|m030|m005|m103,100,False,False,F10
+q09,cold-start-no-relevant,cold-start,T1,What is the renewal date for the Globex account?,ABSTAIN,,m103,0.338,T2,,,,,m103,m009,m103|m005|m009|d001|d002,101,False,False,cold-start-no-abstain|F10|F11
+q10,no-relevant-memory,cold-start,T1,What is Acme's preferred data center region for hosting?,ABSTAIN,,m103,0.3121,T2,,,,,m103,,m103|m020|d001|d002|d003,100,False,False,cold-start-no-abstain|F10
+q11,index-saturation,F4|F8,T1,Tell me about Acme's CRM and pipeline setup.,m002,m001,m001,0.3959,T1,23,1,False,True,m101,,m001|m101|d001|d002|d003,85,False,False,F4|F8|F10
+
+# AGGREGATE
+# n_memories,44
+# n_queries,11
+# top_k,5
+# token_budget,2000
+# overall_accuracy,0.0
+# recall_at_k,0.333
+# supersession_failure_rate,0.8
+# inversion_failures,1
+# cross_tenant_leak_rate,0.5
+# pii_exposure_count,3
+# coldstart_abstention_failure_rate,1.0
+# wasted_topk_slot_rate,0.556
+# duplicate_or_filler_ratio,0.682
+# avg_injected_tokens,92.1
+# max_injected_tokens,105
+# latency_p50_ms,0.0395
+# latency_p95_ms,0.0468

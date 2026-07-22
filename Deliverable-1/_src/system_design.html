@@ -1,0 +1,190 @@
+<meta charset="utf-8">
+<title>System Design — Conversational Memory Intelligence System</title>
+<link rel="stylesheet" href="../../_build/print.css">
+
+<div class="title-block">
+  <p class="eyebrow">Learning Through Reconstruction &middot; Deliverable 4</p>
+  <h1>System Design</h1>
+  <p class="subtitle">A complete, implementable specification of the improved conversational-memory system &mdash; every component tied to a capability, invariant, or measured failure.</p>
+  <div class="meta-grid">
+    <div><b>System</b> Conversational Memory Intelligence System</div>
+    <div><b>Author</b> Dheeraj Pranav</div>
+    <div><b>Envelope</b> small/team B2B SaaS (ADR-004)</div>
+    <div><b>Date</b> 22 July 2026</div>
+    <div><b>Companions</b> architecture.pdf &middot; data_model.md &middot; api_contracts.md &middot; threat_model.md</div>
+    <div><b>Decisions</b> ADR-001…005 &middot; design_backlog.md</div>
+  </div>
+</div>
+
+<div class="callout">
+  <span class="label">Design in one paragraph</span>
+  <p>A write path <b>extracts typed, resolved facts</b> from conversation, screens them for PII at
+  admission, and stores them with <b>validity intervals and provenance</b> in a single transactional
+  store. A read path retrieves <b>tenant-isolated, currently-valid</b> facts, ranks them on four
+  hand-specified signals, and constructs a <b>budgeted, position-aware</b> injection &mdash; or
+  abstains. Conflict resolution lives on the <b>write path</b> (invalidation), not the ranker.
+  Isolation is a <b>row-level invariant</b>, not a filter. Every stage emits a trace, and the whole
+  system is measured offline against the Deliverable&nbsp;3 baseline. Each choice below cites the
+  capability (C1&ndash;C10), premise (P1&ndash;P8), or measured failure it answers.</p>
+</div>
+
+<h2>1. Inputs, outputs, actors, boundaries, trust</h2>
+
+<div class="kv"><dl>
+  <dt>Inputs</dt>
+  <dd>Conversation turns (utterances) scoped to a tenant, account, and user; explicit user
+  corrections; deletion requests. <span class="tag inference">P3</span> Input is low-precision,
+  high-redundancy, and may contain PII or contradictions &mdash; it is <b>untrusted</b>.</dd>
+  <dt>Outputs</dt>
+  <dd>A budgeted, ordered set of memories to inject into the agent's context (or an abstention);
+  admission decisions; a structured decision trace; deletion confirmations with a measured window.</dd>
+  <dt>Actors</dt>
+  <dd>The <b>GTM agent</b> (calls admit on write, retrieve on read); the <b>end user</b> (AE / SDR /
+  RevOps, per tenant); the <b>data-protection officer / admin</b> (deletion, audit); the <b>vendor
+  operator</b> (runs the service). No actor can name another tenant.</dd>
+  <dt>Boundaries &amp; trust</dt>
+  <dd><b>TB-1 admission:</b> nothing crosses into storage until it is typed (C3) and PII-screened
+  (C2/F11). <b>TB-2 isolation:</b> no code path can express a cross-tenant read (C8/F10) &mdash;
+  enforced by RLS + repository scoping, not by callers remembering to filter. Raw transcripts live
+  outside this system; we hold only <i>observed</i> facts + provenance references.</dd>
+</dl></div>
+
+<h2>2. Memory admission policy and representation</h2>
+
+<p><b>Admission (C2, fixes F8/F11).</b> "Store everything" is a policy, and it is the one that
+maximises noise (P3). Every candidate passes three gates before storage: <b>extract</b> (utterance →
+typed resolved claim, fixing F7 — a chunk is not a fact), <b>PII screen</b> (Presidio deterministic-
+first, a hard gate — post-hoc redaction is impossible once data is indexed, ADR-003), and
+<b>op-select</b> (store / update / discard vs existing facts, deduping — Mem0-style, prototype).</p>
+
+<p><b>Representation (C3, fixes F4/F5/F7).</b> A memory is not a proposition; it is a proposition +
+a validity interval + a supersession relation (P4). Each fact carries type, subject, content,
+confidence, observation time, bi-temporal validity, provenance, and tenant &mdash; full schema in
+<span class="mono">data_model.md</span>. Provenance is what makes consolidation safe and deletion
+complete.</p>
+
+<h2>3. Storage and index</h2>
+
+<p><b>Single Postgres + pgvector (ADR-005).</b> The <span class="mono">memory</span> table is the
+source of truth; <span class="mono">memory_embedding</span> is a <i>derived, rebuildable</i> pgvector
+index (C4). At the small/team scale (~2&times;10⁶ facts, ADR-004) both live in one transactional
+database, which collapses the deletion consistency window (F9) to a single transaction and lets
+isolation be a row-level invariant (F10). An embedding-model change is a re-projection, not a
+migration. <span class="tag inference">trade</span> This is tier-bound: mid-market forces a dedicated
+vector store and reopens the deletion-window problem (ADR-005 revisit).</p>
+
+<h2>4. Ranking signals and conflict resolution</h2>
+
+<p><b>Conflict resolution is on the write path, not the ranker (ADR-001).</b> A contradicting fact
+<i>invalidates</i> the prior one at admission (sets its <span class="mono">valid_to</span>), so
+retrieval only ever sees currently-valid facts. This is the direct fix for the D3 result that a stale
+fact beat the current one <b>80%</b> of the time &mdash; similarity cannot encode validity (F4), so
+validity is removed from the ranker's job.</p>
+
+<p><b>Multi-signal ranking (C5).</b> The ranker orders already-valid facts on four <b>hand-specified,
+inspectable</b> signals (D1 non-goal: no learned ranker in v1): <b>relevance</b> (vector similarity),
+<b>recency</b> (observation time), <b>importance</b> (by type — <span class="mono">requirement</span>
+highest, so the buried EU-residency dealbreaker wins its slot), and <b>confidence</b> (corrections =
+1.0). Weights are a config artifact, visible in every trace (C9).</p>
+
+<h2>5. Context selection and token budgeting</h2>
+
+<p><b>Budgeted construction (C6, fixes F2/F3).</b> Injection is a constrained selection problem, not a
+copy (P2). Memories are added in rank order until the <b>&le;2000-token</b> budget binds; ordering is
+<b>position-aware</b> (highest-value at the ends — the middle of a long context is where models use
+facts least, per <i>Lost in the Middle</i>). <b>Defined edge behaviour:</b> when nothing clears the
+<b>abstention floor</b>, return an explicit abstention (the D3 cold-start fix — the baseline failed
+this 2/2, injecting a foreign tenant's budget and a PII record on a query with nothing on file).</p>
+
+<h2>6. Lifecycle: update, consolidate, reflect, expire, delete</h2>
+
+<table class="tight">
+  <thead><tr><th style="width:16%">Operation</th><th style="width:12%">Fixes</th><th>Behaviour</th></tr></thead>
+  <tbody>
+    <tr><td><b>Update / correct</b></td><td>F1</td><td>Supersession transaction; a user correction is the highest-confidence signal there is (C1) &mdash; if nothing else is written, corrections are.</td></tr>
+    <tr><td><b>Consolidate</b></td><td>F5, F6</td><td><b>Cite, don't replace</b>: a rollup memory links to its sources, which stay retrievable. This is the structural guard against summarisation loss and drift (C7). Highest-risk component (first_principles §5) &rarr; earliest adversarial testing.</td></tr>
+    <tr><td><b>Reflect</b></td><td>&mdash;</td><td>Deliberately minimal in v1 (D1 §5.3: validity does more work than reflection). Deferred.</td></tr>
+    <tr><td><b>Expire</b></td><td>&mdash;</td><td>Validity-end and commitment-due sweeps set <span class="mono">valid_to</span>; rows kept for audit.</td></tr>
+    <tr><td><b>Delete</b></td><td>F9</td><td>Hard delete cascades source + index in one transaction; the window is <b>measured</b> per request, not assumed (ADR-004/005).</td></tr>
+  </tbody>
+</table>
+
+<h2>7. PII, authorization, tenant isolation, auditability</h2>
+
+<p><b>PII (C2/F11, ADR-003).</b> Deterministic recognizers first (no LLM on the PII path, no injection
+surface); a hard admission gate, with deletion as backstop. <b>Isolation (C8/F10, ADR-005).</b>
+<span class="mono">tenant_id</span> is enforced twice: Postgres <b>Row-Level Security</b> (a raw query
+that forgets the predicate still reads nothing foreign) and a <b>repository whose tenant is a
+constructor argument, never a method parameter</b> — so no method signature in the codebase can
+express a cross-tenant read. <span class="tag verified">D3 evidence</span> The naive baseline leaked
+foreign-tenant memories on <b>7/11</b> queries; a stronger embedder makes that <i>worse</i>, so
+isolation must be structural. <b>Audit (C9).</b> Every read writes an <span class="mono">access_log</span>
+row: who saw what, when.</p>
+
+<h2>8. Observability and offline evaluation</h2>
+
+<p><b>Observability (C9, from P7).</b> The system's decisions are invisible in its output, so every
+stage emits a structured event: candidates considered, per-signal scores, budget drops, PII
+suppressions, final set — retrievable via <span class="mono">/trace/{id}</span>. This is what lets the
+D3 failure taxonomy be populated from real traffic. <b>Offline eval (C10, from P8, ADR-002).</b> A
+fixed, versioned adversarial set (the D3 dataset + LongMemEval scaffold) runs the <b>3-arm</b>
+comparison (naive / +recency / validity-filter) against the baseline — the non-negotiable gate.
+<span class="tag inference">note</span> C9 and C10 are the two capabilities the failure analysis could
+<i>not</i> surface (first_principles §5) — they exist to make everything else debuggable and provable.</p>
+
+<h2>9. Scale, latency, cost, failure recovery</h2>
+
+<table class="tight">
+  <thead><tr><th style="width:26%">Dimension</th><th style="width:30%">v1 target (ADR-004)</th><th>Design consequence</th></tr></thead>
+  <tbody>
+    <tr><td>Corpus</td><td>≤ ~2&times;10⁶ typed facts</td><td>single Postgres + pgvector HNSW (ADR-005)</td></tr>
+    <tr><td>Injection budget</td><td>≤ 2000 of 16000 tokens</td><td>budgeted, position-aware construction (C6)</td></tr>
+    <tr><td>Latency</td><td>p95 ≤ 300 ms retrieve+rank+construct</td><td>ANN + in-DB filter; no per-candidate LLM on the read path</td></tr>
+    <tr><td>Cost</td><td>≤ 15% of per-turn token spend</td><td>LLM used only at admission (extract, op-select), bounded &amp; batched</td></tr>
+    <tr><td>Deletion</td><td>near-synchronous; ≤ 24 h backstop</td><td>same-txn cascade (F9); window measured</td></tr>
+    <tr><td>Cross-tenant leak</td><td>zero, tested</td><td>RLS + repo scoping (C8)</td></tr>
+  </tbody>
+</table>
+
+<p><b>Failure recovery.</b> Extractor/embedder outage &rarr; admission <b>queues</b> candidates (a
+correction must never be lost, C1), reads continue on existing facts. Index loss &rarr; rebuild from
+source of truth (C4). Bad invalidation (the ADR-001 risk) &rarr; history is preserved, so an
+incorrectly superseded fact is recoverable by re-validation, not gone.</p>
+
+<h2>10. API contracts &amp; data migrations</h2>
+
+<p>Full contracts in <span class="mono">api_contracts.md</span>: <span class="mono">/memory/admit</span>,
+<span class="mono">/memory/retrieve</span>, lifecycle jobs, <span class="mono">/deletion</span>,
+<span class="mono">/trace/{id}</span>, <span class="mono">/eval/run</span>. The load-bearing contract
+rule: <b>tenant is ambient, never a request field</b> — there is no wire to spoof. Migrations: schema
+changes are ordinary Postgres migrations; an embedding-model swap is a re-projection of
+<span class="mono">memory_embedding</span> (not a data migration), per C4.</p>
+
+<h2>11. Milestones with acceptance tests</h2>
+
+<table class="tight">
+  <thead><tr><th style="width:8%">M</th><th style="width:32%">Milestone</th><th>Acceptance test (gate)</th></tr></thead>
+  <tbody>
+    <tr><td><b>M1</b></td><td>Schema + isolation skeleton (data_model, RLS, repository)</td><td>adversarial cross-tenant suite returns zero foreign rows via API, raw-omitted-predicate, and mis-scoped repo (F10)</td></tr>
+    <tr><td><b>M2</b></td><td>Write path: extract → PII gate → op-select → store</td><td>PII candidate stores nothing; supersession txn invalidates prior fact (F11, F4)</td></tr>
+    <tr><td><b>M3</b></td><td>Read path: retrieve → rank → budget → abstain</td><td>beats the D3 baseline on the fixed set; abstains on cold-start; used_tokens ≤ budget (C5/C6/C10)</td></tr>
+    <tr><td><b>M4</b></td><td>Lifecycle: consolidate (cited), expire, delete</td><td>deletion window within guarantee; consolidation keeps sources retrievable (F9, F5/F6)</td></tr>
+    <tr><td><b>M5</b></td><td>Observability + eval harness (3-arm)</td><td>a trace localises an injected failure in D6; 3-arm report reproduces (C9/C10)</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <span class="label">Completion standard (handbook §6.2)</span>
+  <p>Another engineer can implement this without unstated verbal context: each component has a justified
+  purpose (the C/P/F citation), interfaces are in <span class="mono">api_contracts.md</span>, the schema
+  in <span class="mono">data_model.md</span>, security boundaries and the threat model in
+  <span class="mono">threat_model.md</span>, and every open call is an ADR. Where a decision is still
+  provisional (op-selector cost, consolidation) it is marked <i>prototype</i> in the backlog with a
+  validation plan, not hidden.</p>
+</div>
+
+<hr class="footnote-rule">
+<p class="small"><b>AI assistance disclosure.</b> Claude helped draft this specification. The
+architecture, the component→capability→failure mapping, the isolation and lifecycle decisions, and the
+scope choices (ADR-004/005) are mine and are what I will defend in review. Every component traces to a
+capability, premise, or measured failure from Deliverables 1 and 3.</p>

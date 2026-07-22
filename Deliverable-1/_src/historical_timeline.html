@@ -1,0 +1,263 @@
+<meta charset="utf-8">
+<title>Historical Timeline: From Implicit Context to Managed Conversational Memory</title>
+<link rel="stylesheet" href="../../_build/print.css">
+
+<div class="title-block">
+  <p class="eyebrow">Learning Through Reconstruction &middot; Deliverable 1 of 8</p>
+  <h1>Historical Timeline</h1>
+  <p class="subtitle">From implicit model context to managed conversational memory, read as a chain of bottlenecks.</p>
+  <div class="meta-grid">
+    <div><b>System</b> Conversational Memory Intelligence System</div>
+    <div><b>Author</b> Dheeraj Pranav</div>
+    <div><b>Form</b> approach &rarr; observed bottleneck &rarr; next approach</div>
+    <div><b>Date</b> 19 July 2026</div>
+  </div>
+</div>
+
+<div class="callout">
+  <span class="label">How to read this</span>
+  <p>Each era below states what its approach <b>bought</b>, what limit it <b>hit</b>, and which
+  limit <b>forced</b> the next move. The claim being made is not that this is the only possible
+  reading of the literature. It is that every capability in the current design can be traced to
+  a specific bottleneck someone actually ran into, rather than being copied from a reference
+  architecture. Where a step is my interpretation rather than something a paper claims, it is
+  tagged <span class="tag inference">inference</span>.</p>
+</div>
+
+<div class="era">
+  <p class="era-head">1. Knowledge in the weights, state in a hidden vector</p>
+  <p class="era-when">Before 2014 &middot; recurrent sequence models</p>
+  <p>Continuity across a sequence lives in a fixed-size hidden state carried from step to step,
+  and everything else the model knows lives in its parameters. There is no addressable store and
+  no write path other than gradient descent.</p>
+  <div class="chain">
+    <b>Bought:</b> continuity within a sequence, learned end to end.<br>
+    <b>Hit:</b> the hidden state is a fixed-size bottleneck that must compress unboundedly long
+    history into constant space, and the only way to add a fact is to retrain.<br>
+    <span class="arrow">&rarr;</span> <b>Forced:</b> memory that is external to the computation
+    and addressable rather than blended into one vector.
+  </div>
+</div>
+
+<div class="era">
+  <p class="era-head">2. Explicit external memory, differentiable and addressable</p>
+  <p class="era-when">2014 to 2015 &middot; Memory Networks; Neural Turing Machines; End-To-End Memory Networks</p>
+  <p>Separate the store from the controller. Give the model an array it can read from and write
+  to via learned addressing, and let it take several hops before answering.
+  <span class="tag verified">verified</span> This is the origin of the read/write/address
+  decomposition that every later memory system inherits, including this one.</p>
+  <div class="chain">
+    <b>Bought:</b> memory as a first-class, inspectable component, with multi-hop access.<br>
+    <b>Hit:</b> the memory is fixed-size and trained jointly with the task, so it does not extend
+    to millions of user-specific facts. Differentiable addressing over every slot is quadratic in
+    store size. <span class="tag inference">inference</span> More decisively for this project,
+    there is no lifecycle at all: no expiry, no supersession, no deletion, no provenance.<br>
+    <span class="arrow">&rarr;</span> <b>Forced:</b> giving up differentiability of the store, and
+    treating retrieval as a separate non-learned system component.
+  </div>
+</div>
+
+<div class="era">
+  <p class="era-head">3. Attention replaces recurrence</p>
+  <p class="era-when">2017 &middot; Attention Is All You Need</p>
+  <p>Dispense with the recurrent state. Every position attends to every other position directly
+  inside a fixed window.</p>
+  <div class="chain">
+    <b>Bought:</b> full pairwise access within the window, and the scaling behaviour that made
+    large pretrained models practical.<br>
+    <b>Hit:</b> attention is quadratic in sequence length and the window is hard-bounded.
+    <span class="tag inference">inference</span> Critically, the window is per-request. It has no
+    persistence, no write path, and no existence after the response is returned. The transformer
+    solved access <i>within</i> a context and left the question of what should be in that context
+    entirely open.<br>
+    <span class="arrow">&rarr;</span> <b>Forced:</b> deciding what to put in a finite window,
+    which is a selection problem over an external corpus.
+  </div>
+</div>
+
+<div class="era">
+  <p class="era-head">4. Retrieval augmentation: separate what is known from what is remembered</p>
+  <p class="era-when">2020 &middot; Retrieval-Augmented Generation</p>
+  <p>Keep a non-parametric index alongside the parametric model. Embed the query, retrieve the
+  top-k passages, condition generation on them. <span class="tag verified">verified</span> The
+  decisive contribution is that the knowledge source becomes editable without retraining.</p>
+  <div class="chain">
+    <b>Bought:</b> a write path that does not require gradient descent, and provenance, because
+    the retrieved passage can be shown.<br>
+    <b>Hit:</b> the corpus is assumed static, internally consistent, and externally curated.
+    Nothing writes to it from the conversation, ranking is a single similarity signal, and there
+    is no notion of a fact ceasing to be true.<br>
+    <span class="arrow">&rarr;</span> <b>Forced (two ways):</b> tighter model-level integration of
+    retrieval, and separately, indexes that could actually hold billions of vectors.
+  </div>
+</div>
+
+<div class="era">
+  <p class="era-head">5a. Retrieval pushed into the model</p>
+  <p class="era-when">2022 &middot; RETRO; Memorizing Transformers</p>
+  <p>Retrieve during the forward pass rather than as a preprocessing step, either from a
+  trillion-token database or from cached attention keys and values of earlier inputs.</p>
+  <div class="chain">
+    <b>Bought:</b> evidence that a small model with a large retrieval store can match a much
+    larger parametric model, which reframes memory as a substitute for parameters rather than an
+    accessory to them.<br>
+    <b>Hit:</b> still a read-only corpus, still no admission policy, and no user- or
+    tenant-level semantics. <span class="tag inference">inference</span> These systems make
+    retrieval better without making <i>memory</i> a managed object, which is the gap this project
+    is actually in.<br>
+    <span class="arrow">&rarr;</span> <b>Forced:</b> looking at ranking policy rather than
+    retrieval mechanism.
+  </div>
+</div>
+
+<div class="era">
+  <p class="era-head">5b. Indexes that make retrieval practical at scale</p>
+  <p class="era-when">2017 to 2018 &middot; FAISS; HNSW</p>
+  <p>Approximate nearest-neighbour search over billions of vectors at interactive latency, via
+  GPU-accelerated search and navigable small-world graphs.</p>
+  <div class="chain">
+    <b>Bought:</b> the scale assumption everything above quietly depends on. Without this branch
+    retrieval augmentation stays a research result.<br>
+    <b>Hit:</b> these are index structures, not data-management systems. Deletion is awkward or
+    deferred, incremental update is a rebuild-versus-recall trade-off, and attribute filtering
+    fights recall. <span class="tag inference">inference</span> The absence of first-class
+    deletion at the index layer is precisely why erasure has to be designed as a distributed
+    operation with a stated consistency window rather than assumed to be a delete call.<br>
+    <span class="arrow">&rarr;</span> <b>Forced:</b> treating the index as a rebuildable
+    projection of a separate source of truth, not as the store itself.
+  </div>
+</div>
+
+<div class="era">
+  <p class="era-head">6. Ranking becomes multi-signal, and memory gets a lifecycle</p>
+  <p class="era-when">2023 &middot; Generative Agents</p>
+  <p>A memory stream of observations, retrieved by a score combining relevance, recency, and
+  importance, with periodic reflection that synthesises higher-level memories from lower-level
+  ones. <span class="tag verified">verified</span> This is direct published evidence that
+  single-signal similarity is insufficient, in a setting far less adversarial than a revenue
+  system.</p>
+  <div class="chain">
+    <b>Bought:</b> the two ideas this project depends on most. Ranking is a policy over several
+    signals, and memory has a lifecycle rather than only a write and a read.<br>
+    <b>Hit:</b> importance is scored by an LLM call at write time, which is expensive at
+    production volume. <span class="tag inference">inference</span> More fundamentally, the
+    setting is a simulation of agents with no real data subjects, so there is no PII admission
+    problem, no tenant boundary, no erasure obligation, no supersession of a stated preference,
+    and no offline evaluation set. Every one of those is load-bearing in my setting.<br>
+    <span class="arrow">&rarr;</span> <b>Forced:</b> asking who manages the context budget, and
+    separately, what happens when memory meets real users and real regulation.
+  </div>
+</div>
+
+<div class="era">
+  <p class="era-head">7. Context as a managed resource</p>
+  <p class="era-when">2023 &middot; MemGPT</p>
+  <p>Treat the context window as the analogue of main memory in an operating system, with an
+  external store as disk, and let the model page information in and out under a budget.</p>
+  <div class="chain">
+    <b>Bought:</b> the framing that context is an allocation problem with a budget and an
+    allocator, rather than a container you fill.<br>
+    <b>Hit:</b> the self-managed paging loop assumes the model is a trustworthy allocator, and
+    it says nothing about which information was eligible to be stored in the first place.
+    <span class="tag inference">inference</span> Admission, deletion guarantees, tenant
+    isolation, and reproducible offline evaluation are all outside its scope. The useful transfer
+    is the budget framing, not the paging mechanism.<br>
+    <span class="arrow">&rarr;</span> <b>Forced:</b> an explicit admission stage before storage,
+    and policy that lives outside the model rather than inside its loop.
+  </div>
+</div>
+
+<div class="era">
+  <p class="era-head">8. The long-context detour, and why it does not close the loop</p>
+  <p class="era-when">2023 onward &middot; Lost in the Middle, and the growth of window sizes</p>
+  <p>The obvious response to all of the above is to make the window large enough that selection
+  stops mattering. <span class="tag verified">verified</span> Liu et al. show that recall from a
+  long context is strongly position-dependent and worst when the relevant fact sits in the
+  middle, so usable capacity is smaller than nominal capacity.</p>
+  <div class="chain">
+    <b>Bought:</b> real headroom. Many problems that needed retrieval in 2020 do not need it now.<br>
+    <b>Hit:</b> the quantitative limit is position-dependent recall.
+    <span class="tag inference">inference</span> The categorical limit is more important: a
+    window is per-request working memory. It has no persistence, no write path, no deletion
+    semantics, no tenant boundary, and no audit trail, at any size. Growing it changes the size
+    of the selection budget and nothing else about the structure of the problem.<br>
+    <span class="arrow">&rarr;</span> <b>Forced:</b> accepting that memory is a system to be
+    built, not a model capability to wait for.
+  </div>
+</div>
+
+<div class="era">
+  <p class="era-head">9. The gap this project occupies</p>
+  <p class="era-when">2026 &middot; managed conversational memory</p>
+  <p>Each era above solved the bottleneck in front of it and left a different one exposed. Read
+  as a set, what is missing is not a mechanism but a <i>policy layer</i>: decisions about what
+  is admitted, how it is represented, how long it stays true, who may see it, and how any of
+  that is measured.</p>
+  <div class="chain">
+    <b>Inherited:</b> read/write/address decomposition (era 2), an editable non-parametric store
+    (era 4), practical ANN indexing (era 5b), multi-signal ranking and lifecycle (era 6), context
+    as a budget (era 7).<br>
+    <b>Still open:</b> admission control over ineligible and low-value information; typed facts
+    with provenance, confidence, and validity intervals; conflict resolution over superseded
+    claims; deletion with a tested consistency window; tenant isolation as an invariant rather
+    than a filter; and reproducible offline evaluation against a baseline.<br>
+    <span class="arrow">&rarr;</span> <b>This project.</b> The ten capabilities derived in
+    <span class="mono">first_principles.md</span>.
+  </div>
+</div>
+
+<h2 class="page-break">Compressed chain</h2>
+
+<table class="tight">
+  <thead>
+    <tr><th style="width:9%">Era</th><th style="width:25%">Approach</th><th style="width:33%">Observed bottleneck</th><th>What it forced</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>&lt;2014</td><td>State in a hidden vector, knowledge in weights</td><td>Fixed-size state; the only write path is retraining</td><td>External addressable memory</td></tr>
+    <tr><td>2014&ndash;15</td><td>Differentiable external memory</td><td>Fixed-size, jointly trained, no lifecycle</td><td>Non-differentiable retrieval as a system component</td></tr>
+    <tr><td>2017</td><td>Attention over a fixed window</td><td>Quadratic cost; window is per-request and does not persist</td><td>Selection over an external corpus</td></tr>
+    <tr><td>2020</td><td>Retrieval-augmented generation</td><td>Static read-only corpus; single similarity signal</td><td>Better integration, and indexes at scale</td></tr>
+    <tr><td>2022</td><td>Retrieval inside the model</td><td>Still read-only; no user or tenant semantics</td><td>Attention shifts to ranking policy</td></tr>
+    <tr><td>2017&ndash;18</td><td>FAISS, HNSW</td><td>Deletion, incremental update, and filtering are index-level problems</td><td>Index as a rebuildable projection of a source of truth</td></tr>
+    <tr><td>2023</td><td>Generative Agents</td><td>Costly write-time importance; no privacy, tenancy, or evaluation</td><td>Multi-signal ranking, and a lifecycle</td></tr>
+    <tr><td>2023</td><td>MemGPT</td><td>No admission policy; model as its own allocator</td><td>Policy outside the model</td></tr>
+    <tr><td>2023+</td><td>Long context</td><td>Position-dependent recall; a window is not storage</td><td>Build the system</td></tr>
+    <tr><td><b>2026</b></td><td><b>Managed conversational memory</b></td><td><b>To be established by the Deliverable 3 baseline</b> <span class="tag tomeasure">to measure</span></td><td><b>C1 to C10</b></td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <span class="label">Honest caveat</span>
+  <p>This chain is drawn to explain the design I am proposing, which means it is vulnerable to
+  hindsight bias. The eras did not follow one another as cleanly as the table implies, and
+  several were concurrent rather than sequential. The falsifiable version of the claim is
+  narrower and is the one I will defend: <b>each of C1 to C10 addresses a bottleneck that at
+  least one of these lines of work explicitly ran into or explicitly declared out of scope.</b>
+  Anything in the design that cannot be traced to such a bottleneck should be cut in
+  Deliverable 4.</p>
+</div>
+
+<hr class="footnote-rule">
+
+<h3>Sources</h3>
+<ol class="small">
+  <li>Weston, J., Chopra, S., Bordes, A. <i>Memory Networks.</i> 2014. arXiv:1410.3916</li>
+  <li>Graves, A., Wayne, G., Danihelka, I. <i>Neural Turing Machines.</i> 2014. arXiv:1410.5401</li>
+  <li>Sukhbaatar, S., Weston, J., Fergus, R., et al. <i>End-To-End Memory Networks.</i> 2015. arXiv:1503.08895</li>
+  <li>Vaswani, A., Shazeer, N., Parmar, N., et al. <i>Attention Is All You Need.</i> 2017. arXiv:1706.03762</li>
+  <li>Johnson, J., Douze, M., J&eacute;gou, H. <i>Billion-scale Similarity Search with GPUs.</i> 2017. arXiv:1702.08734</li>
+  <li>Malkov, Y. A., Yashunin, D. A. <i>Efficient and Robust Approximate Nearest Neighbor Search Using Hierarchical Navigable Small World Graphs.</i> 2018. arXiv:1603.09320</li>
+  <li>Lewis, P., Perez, E., Piktus, A., et al. <i>Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.</i> 2020. arXiv:2005.11401</li>
+  <li>Borgeaud, S., Mensch, A., Hoffmann, J., et al. <i>Improving Language Models by Retrieving from Trillions of Tokens.</i> 2022. arXiv:2112.04426</li>
+  <li>Wu, Y., Rabe, M., Hutchins, D., Szegedy, C. <i>Memorizing Transformers.</i> 2022. arXiv:2203.08913</li>
+  <li>Park, J. S., O'Brien, J. C., Cai, C. J., et al. <i>Generative Agents: Interactive Simulacra of Human Behavior.</i> 2023. arXiv:2304.03442</li>
+  <li>Packer, C., Wooders, S., Lin, K., et al. <i>MemGPT: Towards LLMs as Operating Systems.</i> 2023. arXiv:2310.08560</li>
+  <li>Liu, N. F., Lin, K., Hewitt, J., et al. <i>Lost in the Middle: How Language Models Use Long Contexts.</i> 2023. arXiv:2307.03172</li>
+</ol>
+
+<p class="small">Items 1 to 11 are handbook Appendix G. Item 12 is added because it supplies the
+direct evidence for era 8.</p>
+
+<p class="small"><b>AI assistance disclosure.</b> Claude was used to draft prose and check the
+chain for gaps. The selection of eras, the bottleneck attributions, the separation of what each
+source claims from what I infer, and the caveat above are mine.</p>

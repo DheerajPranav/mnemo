@@ -1,0 +1,219 @@
+<meta charset="utf-8">
+<title>Productive Failure Report — Naive Baseline — Conversational Memory Intelligence System</title>
+<link rel="stylesheet" href="../../_build/print.css">
+
+<div class="title-block">
+  <p class="eyebrow">Learning Through Reconstruction &middot; Deliverable 3</p>
+  <h1>Productive Failure Report</h1>
+  <p class="subtitle">What the naive single-signal memory baseline actually does on the GTM workload &mdash; measured, not asserted.</p>
+  <div class="meta-grid">
+    <div><b>System</b> Conversational Memory Intelligence System</div>
+    <div><b>Author</b> Dheeraj Pranav</div>
+    <div><b>Baseline</b> Approach D &mdash; store-all, single-signal retrieval</div>
+    <div><b>Date</b> 22 July 2026</div>
+    <div><b>Protocol</b> ../experiments/baseline_protocol.md</div>
+    <div><b>Data</b> baseline_results.csv &middot; error_examples.jsonl</div>
+  </div>
+</div>
+
+<div class="callout">
+  <span class="label">Headline</span>
+  <p>The naive baseline passes <b>0 of 11</b> queries (overall accuracy <b>0.0</b>). It is not a weak
+  <i>retriever</i> &mdash; it is fast (p95 <b>0.05&nbsp;ms</b>) and stays far under budget (<b>92</b> of
+  2000 tokens injected). It fails because whole classes of requirement live <b>outside</b> what a
+  similarity signal can express. A superseded fact beats the current one <b>80%</b> of the time; a
+  foreign tenant&rsquo;s memory leaked into top-k on <b>7 of 11</b> queries; a health-PII record was
+  injected <b>3</b> times, once on a query with no relevant memory at all. Every failure is
+  <b>structural</b>: re-ordering the same candidate set does not add a validity field, a tenant
+  boundary, or a PII gate. <span class="tag verified">hypothesis supported</span></p>
+</div>
+
+<h2>1. Hypothesis (pre-registered)</h2>
+
+<p>From <span class="mono">baseline_protocol.md &sect;1</span>: the strongest of the simpler designs
+&mdash; single-signal retrieval over stored chunks &mdash; fails on the GTM workload <b>not because
+its retriever is weak, but because temporal validity, resolved meaning, admission control, and
+tenant isolation are orthogonal to any similarity signal</b>. If naive retrieval instead handled the
+adversarial conditions, Deliverable&nbsp;1&rsquo;s design would be over-built and should be cut. The
+baseline was constructed to give that outcome a fair chance (&sect;7).</p>
+
+<h2>2. Baseline design</h2>
+
+<p>Approach D from <span class="mono">reconstruction/failure_analysis.md</span>, implemented
+literally: <b>store every chunk &rarr; retrieve top-k by cosine similarity &rarr; inject in
+similarity order until a token budget is hit</b>. Similarity is lexical TF-IDF cosine (pure stdlib,
+deterministic, no model download &mdash; justification and threats in the protocol). Deliberately
+absent, and <i>that absence is the experiment</i>: admission control, typed/resolved facts, temporal
+validity, multi-signal ranking, index-level tenant partitioning, and any abstention threshold.
+Fixed parameters: <span class="mono">k=5</span>, <span class="mono">budget=2000</span>,
+<span class="mono">seed=20260722</span>.</p>
+
+<h2>3. Workload</h2>
+
+<p>A fixed, seeded, adversarial-by-construction GTM dataset: <b>44 memories</b> (1 PII, 3
+foreign-tenant, 68% filler/duplicate), <b>two tenants that both have an &ldquo;Acme&rdquo;
+account</b> with near-identical notes, and <b>11 queries</b> covering all six required conditions.
+Traps are hand-authored so a single similarity signal is <i>forced</i> to expose each failure &mdash;
+stale facts carry <i>more</i> query-term overlap than their corrections, so the lexical bias runs in
+the baseline&rsquo;s favour, making this a harder test to pass, not an easier one.</p>
+
+<table class="tight">
+  <thead><tr><th style="width:34%">Required condition</th><th style="width:22%">Queries</th><th>Probes</th></tr></thead>
+  <tbody>
+    <tr><td>Irrelevant + contradictory retrievable</td><td>q01, q02, q03, q11</td><td>F4, F8</td></tr>
+    <tr><td>Preferences that change (supersession)</td><td>q01, q02, q03</td><td>F4</td></tr>
+    <tr><td>Long conversation, constrained budget</td><td>q08</td><td>F3, F8</td></tr>
+    <tr><td>Multiple tenants, similar wording</td><td>q05, q06</td><td>F4, F10</td></tr>
+    <tr><td>Sensitive info that must not surface</td><td>q07 (+ leaks into q04, q09)</td><td>F11</td></tr>
+    <tr><td>Cold start / no relevant memory</td><td>q09, q10</td><td>cold-start</td></tr>
+  </tbody>
+</table>
+
+<h2>4. Results</h2>
+
+<table class="tight">
+  <thead><tr><th style="width:46%">Metric</th><th style="width:16%">Measured</th><th>Reading</th></tr></thead>
+  <tbody>
+    <tr><td>overall_accuracy</td><td><b>0.000</b> (0/11)</td><td>no query passes every condition-appropriate check</td></tr>
+    <tr><td>recall_at_k (answerable)</td><td><b>0.333</b> (3/9)</td><td>the current fact is usually not even in the top-5</td></tr>
+    <tr><td>supersession_failure_rate</td><td><b>0.800</b> (4/5)</td><td>the stale fact outranks the current one four times in five</td></tr>
+    <tr><td>inversion_failures (F7)</td><td><b>1</b></td><td>the inverting utterance beats the resolved fact by 30 ranks</td></tr>
+    <tr><td>cross_tenant_leak_rate (F10-probed)</td><td><b>0.500</b> (1/2)</td><td>&mdash; but see the emergent rate below</td></tr>
+    <tr><td><b>cross-tenant leak (all queries)</b></td><td><b>7 / 11</b></td><td><b>foreign-tenant memory in top-k far beyond the designed cases</b></td></tr>
+    <tr><td>pii_exposure_count (F11)</td><td><b>3</b></td><td>one PII record injected on 3 different queries, incl. a cold-start</td></tr>
+    <tr><td>coldstart_abstention_failure_rate</td><td><b>1.000</b> (2/2)</td><td>never abstains; injects noise when nothing is relevant</td></tr>
+    <tr><td>wasted_topk_slot_rate</td><td><b>0.556</b> (25/45)</td><td>over half of retrieved slots are filler/duplicate</td></tr>
+    <tr><td>duplicate_or_filler_ratio (corpus)</td><td><b>0.682</b></td><td>the store is mostly noise; nothing gates admission</td></tr>
+    <tr><td>avg / max injected tokens</td><td><b>92.1 / 105</b></td><td>the 2000-token budget <i>never bound</i> &mdash; size is not the problem</td></tr>
+    <tr><td>latency p50 / p95</td><td><b>&asymp;0.04 / 0.05 ms</b></td><td>the baseline is trivially cheap; its failures are not a cost problem</td></tr>
+  </tbody>
+</table>
+
+<p>The two rows that matter most are the ones that look benign: <b>budget never bound</b> and
+<b>latency is negligible</b>. They rule out the easy story (&ldquo;just optimise retrieval / add
+more budget&rdquo;). At k=5 the failure is <i>what</i> is selected and <i>whether it should be
+stored at all</i> &mdash; not how much or how fast.</p>
+
+<h3>4.1 Four failures, concretely (from <span class="mono">error_examples.jsonl</span>)</h3>
+
+<div class="kv"><dl>
+  <dt>q02 &mdash; &ldquo;Who is the decision maker at Acme?&rdquo; &nbsp;<span class="tag tomeasure">F4 + F10</span></dt>
+  <dd>Rank&nbsp;1: <span class="mono">m003</span> stale &mdash; &ldquo;Ravi Menon, VP Engineering&rdquo;
+  (0.752). Rank&nbsp;2: <span class="mono">m102</span> <b>from tenant T2 (Contoso)</b> &mdash; &ldquo;Dana
+  Whitfield&rdquo; (0.717). The <i>correct</i> current fact (Priya owns it now, <span class="mono">m004</span>)
+  is at <b>rank 31</b>. A departed contact and a <i>different customer&rsquo;s</i> decision-maker both
+  beat the truth.</dd>
+
+  <dt>q04 &mdash; &ldquo;Does Acme need SSO?&rdquo; &nbsp;<span class="tag tomeasure">F7 + F11</span></dt>
+  <dd>Rank&nbsp;1: <span class="mono">m005</span> &mdash; &ldquo;I don&rsquo;t think we need SSO for the
+  pilot&rdquo; (0.463). The resolved fact (&ldquo;put it in &mdash; non-negotiable for production&rdquo;,
+  <span class="mono">m006</span>) is at <b>rank 31</b>. The injected context asserts the <i>inverse</i>
+  of the account&rsquo;s real position &mdash; and rank&nbsp;3 is a <b>health-PII record</b>
+  (<span class="mono">m009</span>: a colleague&rsquo;s chemotherapy leave and personal mobile) on a
+  question about SSO.</dd>
+
+  <dt>q09 &mdash; &ldquo;Renewal date for the Globex account?&rdquo; &nbsp;<span class="tag tomeasure">cold-start + F10 + F11</span></dt>
+  <dd>Nothing on Globex exists; the baseline should abstain. Instead it injects
+  <span class="mono">m103</span> (T2&rsquo;s <b>confidential 85k budget</b>), an unrelated SSO utterance,
+  and the PII record <span class="mono">m009</span>. The worst possible answer to &ldquo;I have nothing
+  on file&rdquo; is another tenant&rsquo;s deal size plus someone&rsquo;s medical data.</dd>
+
+  <dt>q01 &mdash; &ldquo;What CRM does Acme use?&rdquo; &nbsp;<span class="tag tomeasure">F4 + F8</span></dt>
+  <dd>The entire top-3 is <b>duplicate recitations of the stale Salesforce fact</b>
+  (<span class="mono">d001/d002/d003</span>, all 0.44). The current fact (migrated to HubSpot,
+  <span class="mono">m002</span>) is at rank&nbsp;14. Storing everything let one obsolete fact
+  manufacture its own majority.</dd>
+</dl></div>
+
+<h2>5. Failure taxonomy (measured against D1 &sect;6)</h2>
+
+<table class="tight">
+  <thead><tr><th style="width:6%">#</th><th style="width:34%">Failure (D1)</th><th style="width:16%">Measured</th><th>Recoverable?</th></tr></thead>
+  <tbody>
+    <tr><td><b>F4</b></td><td>Superseded fact served as current</td><td><span class="tag tomeasure">0.80</span></td><td>yes</td></tr>
+    <tr><td><b>F7</b></td><td>Chunk inverts meaning out of context</td><td><span class="tag tomeasure">1 case, gold&nbsp;@31</span></td><td>yes</td></tr>
+    <tr><td><b>F8</b></td><td>Index saturated with low-value duplicates</td><td><span class="tag tomeasure">0.556 slots</span></td><td>yes</td></tr>
+    <tr><td><b>F10</b></td><td>Cross-tenant memory returned</td><td><span class="tag tomeasure">7/11 queries</span></td><td><b>no</b></td></tr>
+    <tr><td><b>F11</b></td><td>Sensitive data retained &amp; surfaced</td><td><span class="tag tomeasure">3 exposures</span></td><td><b>no</b></td></tr>
+    <tr><td>cold</td><td>No abstention on empty retrieval</td><td><span class="tag tomeasure">2/2</span></td><td>yes</td></tr>
+  </tbody>
+</table>
+
+<p>The baseline reproduced <b>2 of D1&rsquo;s 5 unrecoverable failures</b> (F10, F11), and both fired
+hard. That is the whole argument for the architecture in one line: a system can tolerate retrieving a
+mediocre memory; it cannot tolerate retrieving <i>another tenant&rsquo;s</i> memory or a record it
+should never have stored.</p>
+
+<div class="callout warn">
+  <span class="label">What this run does NOT show &mdash; stated to keep the result honest</span>
+  <p><b>F1, F2</b> (correction across sessions; quadratic prompt growth) need a multi-turn write path;
+  <b>F5, F6</b> (summarisation loss / drift) need a summariser; <b>F9</b> (deleted-yet-retrievable)
+  needs a delete-then-requery test. A retrieval-only baseline structurally cannot exercise these &mdash;
+  they move to the Deliverable&nbsp;6 verification harness. <b>F3 did not reproduce here</b>: the buried
+  EU-residency dealbreaker (<span class="mono">m020</span>) happened to surface at rank&nbsp;1 because the
+  query shared its terms, so q08 failed on F8/F10, not on a buried-fact miss. Reported as a
+  <i>non-confirmation</i>, not glossed over. The dataset is small and author-built: it shows the
+  <i>existence and character</i> of each failure, not population frequencies.</p>
+</div>
+
+<h2>6. Proposed response &mdash; and the D1 tags it retires</h2>
+
+<p>Each measured failure maps to a mechanism already decided in Deliverable&nbsp;2, so the baseline
+does more than confirm the problem &mdash; it prices the fix:</p>
+
+<table class="tight">
+  <thead><tr><th style="width:14%">Failure</th><th style="width:20%">Measured</th><th>Mechanism (D2 decision)</th></tr></thead>
+  <tbody>
+    <tr><td><b>F4</b></td><td>0.80 supersession</td><td>Bi-temporal validity + invalidation on the write path (ADR-001) &mdash; ranker only ever orders currently-valid facts</td></tr>
+    <tr><td><b>F7</b></td><td>gold buried at rank 31</td><td>Extraction into typed, <i>resolved</i> claims at admission &mdash; store the fact, not the utterance</td></tr>
+    <tr><td><b>F8</b></td><td>0.556 wasted slots</td><td>Admission salience + dedup; consolidation that cites, not repeats</td></tr>
+    <tr><td><b>F10</b></td><td>7/11 leaked</td><td>Index-level tenant partitioning as an invariant below the retrieval API (not a post-filter)</td></tr>
+    <tr><td><b>F11</b></td><td>3 exposures</td><td>Presidio deterministic PII gate at admission + deletion backstop (ADR-003)</td></tr>
+    <tr><td>cold-start</td><td>2/2 no-abstain</td><td>Similarity-floor abstention: return &ldquo;nothing on file&rdquo; below threshold</td></tr>
+  </tbody>
+</table>
+
+<p><b>Deliverable&nbsp;1 <span class="tag tomeasure">to measure</span> tags now retired to numbers:</b>
+the <span class="mono">failure_analysis.md</span> D-3 claim (&ldquo;proportion of retrieved slots
+occupied by non-informative or duplicate content&rdquo;) is now <b>0.556</b>; the D-1/B-3 claim that a
+single similarity signal cannot prefer current over stale is now <b>0.80</b> supersession-failure. The
+tags that remain open (restatement-token share, summariser drift) require the mechanisms this baseline
+deliberately lacks and stay <span class="tag tomeasure">to measure</span> for Deliverable&nbsp;6.</p>
+
+<h2>7. Falsification</h2>
+
+<p><b>What would have refuted the hypothesis:</b> high recall@k with failures concentrated in
+low-similarity <i>misses</i> &mdash; the kind a better encoder fixes. That is not what happened.</p>
+
+<ul>
+  <li><b>The gaps are validity/identity gaps, not relevance gaps.</b> The correct fact sat at rank
+  <b>31</b> in two separate cases while a stale or foreign chunk sat at rank&nbsp;1&ndash;2. No
+  re-ordering <i>within</i> a similarity score closes a 30-rank gap that encodes <i>which fact is true</i>
+  or <i>whose tenant it is</i> &mdash; those axes are not in the score.</li>
+  <li><b>A stronger embedder makes F10 worse, not better.</b> The cross-tenant leaks come from
+  near-identical notes across two &ldquo;Acme&rdquo; accounts; higher semantic fidelity raises their
+  similarity, so a better model leaks <i>more</i> confidently. Isolation cannot be earned by accuracy.</li>
+  <li><b>Cost and budget are ruled out.</b> p95 latency 0.05&nbsp;ms and 92/2000 tokens injected mean
+  the failures are not artefacts of a starved budget or a slow index.</li>
+</ul>
+
+<p><b>Honest caveats.</b> One targeted failure (F3 buried-fact) did not reproduce on this dataset, and
+the abstention result is measured against a reference threshold the baseline does not apply. Neither
+rescues the naive design: the two <i>unrecoverable</i> failures it did produce (F10, F11) are
+sufficient on their own to reject store-everything single-signal retrieval for a multi-tenant,
+regulated GTM setting. The hypothesis stands, and the Deliverable&nbsp;4 design must own each
+mechanism in &sect;6 &mdash; each is now backed by a measured failure rate, not an assertion.</p>
+
+<hr class="footnote-rule">
+
+<p class="small"><b>Reproducibility.</b> Pure Python standard library, fixed seed
+(<span class="mono">20260722</span>), no network or API key. <span class="mono">cd
+experiments/naive_baseline &amp;&amp; python3 build_dataset.py &amp;&amp; python3 evaluate.py</span>
+reproduces every <i>failure</i> metric here byte-for-byte; only the two wall-clock latency figures
+vary run-to-run (in the 3rd decimal). Method, metric definitions, and threats to validity:
+<span class="mono">experiments/baseline_protocol.md</span>.</p>
+
+<p class="small"><b>AI assistance disclosure.</b> Claude helped implement the harness and draft this
+report. The hypothesis, the adversarial dataset design, the failure&rarr;mechanism mapping, and the
+falsification argument are mine and are what I will defend in review. Every number is machine-produced
+by <span class="mono">evaluate.py</span> from the committed dataset; none is hand-entered.</p>

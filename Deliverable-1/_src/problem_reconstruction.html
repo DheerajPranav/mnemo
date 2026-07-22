@@ -1,0 +1,287 @@
+<meta charset="utf-8">
+<title>Problem Reconstruction: Conversational Memory Intelligence System</title>
+<link rel="stylesheet" href="../../_build/print.css">
+
+<div class="title-block">
+  <p class="eyebrow">Learning Through Reconstruction &middot; Deliverable 1 of 8</p>
+  <h1>Problem Reconstruction</h1>
+  <p class="subtitle">Why a stateless or retrieval-only assistant is insufficient, and what follows from that.</p>
+  <div class="meta-grid">
+    <div><b>System</b> Conversational Memory Intelligence System</div>
+    <div><b>Author</b> Dheeraj Pranav</div>
+    <div><b>Grounding domain</b> GTM AI, B2B SaaS revenue teams</div>
+    <div><b>Date</b> 19 July 2026</div>
+    <div><b>Handbook</b> v1.0, section 3</div>
+    <div><b>Companions</b> failure_analysis.md, first_principles.md, historical_timeline.pdf</div>
+  </div>
+</div>
+
+<div class="callout">
+  <span class="label">Evidence standard</span>
+  <p>Claims carry one of four tags, the same scheme used across all four Deliverable&nbsp;1
+  artifacts: <span class="tag verified">verified</span> (stated in a cited source or in my own
+  production experience), <span class="tag inference">inference</span> (my reading of what the
+  evidence implies, not claimed by the source), <span class="tag assumption">assumption</span>
+  (a working assumption about my deployment, unmeasured), or
+  <span class="tag tomeasure">to measure</span> (a claim I refuse to assert until the
+  Deliverable&nbsp;3 baseline produces a number). <b>No benchmark result appears in this
+  document.</b> The naive baseline is Deliverable&nbsp;3 and has not been built.</p>
+</div>
+
+<h2>1. The problem, stated without naming a solution</h2>
+
+<p>The handbook asks that the problem be written before the intended architecture is named.
+This section contains no mention of memory systems, retrieval, embeddings, or storage. It is
+the statement I would give to someone who had never heard of any of them.</p>
+
+<div class="callout">
+  <p><b>An assistant that helps a person with an ongoing, long-running relationship cannot
+  currently carry anything forward from one conversation to the next.</b> It cannot use what it
+  was told last week, it cannot tell what it was told last week from what it was told last year,
+  it forgets corrections immediately, it has no way to distinguish something it should hold onto
+  from something it should never have heard, and it has no way to prove that what it holds about
+  one person was not shown to another.</p>
+</div>
+
+<p>Everything below is a consequence of that paragraph. The order matters: constraints and
+failures are derived from the problem, not selected to justify an architecture I had already
+chosen.</p>
+
+<h2>2. Setting, actors, and conditions of failure</h2>
+
+<h3>2.1 Setting</h3>
+
+<p>A GTM assistant deployed inside a B2B SaaS vendor's revenue stack. It prepares call briefs,
+answers questions about an account's history, and drafts follow-ups. It is multi-tenant: the
+vendor sells it to many customer organisations whose data sits on shared infrastructure.</p>
+
+<p><span class="tag inference">inference</span> This domain is chosen because it supplies
+naturally adversarial conditions rather than contrived ones. Near-duplicate entities across
+tenants, preferences with genuine expiry dates, regulated personal data arriving incidentally,
+and an isolation requirement with commercial consequences all occur here by default. A
+general-purpose chatbot setting would require inventing these conditions. It is also the
+domain of my last six years of production work, which means the failure cases below are
+recognisable to me rather than imagined.</p>
+
+<h3>2.2 Who is affected, and how</h3>
+
+<table>
+  <thead><tr><th style="width:22%">Actor</th><th style="width:40%">What they need to persist</th><th>What failure costs them</th></tr></thead>
+  <tbody>
+    <tr><td><b>Account executive</b></td><td>Buyer preferences, stated objections, who the decision maker is now, what was promised on the last call</td><td>Re-reads transcripts before every call, or walks in with a stale fact and loses credibility with the buyer</td></tr>
+    <tr><td><b>SDR</b></td><td>Which accounts were already researched, what the outcome was, which angles were already tried</td><td>Repeats outreach the account has already declined</td></tr>
+    <tr><td><b>RevOps analyst</b></td><td>Why the system recommended what it did, on which evidence</td><td>Cannot audit or defend the system's behaviour to their own leadership</td></tr>
+    <tr><td><b>Buyer</b> (data subject, not a user)</td><td>Nothing. They need <i>non</i>-persistence of what they did not consent to</td><td>Personal information retained indefinitely without a decision having been made</td></tr>
+    <tr><td><b>Vendor</b></td><td>That tenant A's memories are unreachable from tenant B</td><td>A single cross-tenant disclosure is an existential commercial event</td></tr>
+  </tbody>
+</table>
+
+<p>The fourth row is the one most easily omitted. The buyer never uses the assistant and never
+sees it, yet a large share of the personal data flowing through it is theirs. A design that
+only considers users will not produce the right retention policy.</p>
+
+<h3>2.3 Conditions under which the problem bites</h3>
+
+<ul>
+  <li><b>Long gaps between sessions.</b> Days to months. Nothing survives a session boundary unless deliberately carried.</li>
+  <li><b>Volume beyond replay.</b> An enterprise account accumulates years of calls and threads.</li>
+  <li><b>Facts with expiry.</b> Tooling, personnel, budget, and requirements all change mid-cycle.</li>
+  <li><b>Lexical collisions across tenants.</b> Two customers selling to companies with the same name, in near-identical language.</li>
+  <li><b>Incidental sensitive data.</b> Personal details arrive unbidden in sales conversation.</li>
+  <li><b>Cold start.</b> A brand-new account, where the correct behaviour is to retrieve nothing and say so.</li>
+</ul>
+
+<h2>3. Importance: the cost of leaving it unsolved</h2>
+
+<p>Three consequences, ordered by how recoverable they are. The ordering is the point: it is
+what determines which failures the architecture is allowed to tolerate.</p>
+
+<div class="kv">
+  <dl>
+    <dt>Recoverable &middot; abandonment</dt>
+    <dd><span class="tag assumption">assumption</span> An assistant that must be re-briefed every
+    session costs more attention than it returns, and users stop opening it. I expect abandonment
+    after roughly the third repeated correction.
+    <span class="tag verified">verified</span> This matches what I saw on the Novartis Decision
+    Engine, where field representatives ignored recommendations they could not understand or
+    influence. Adoption is gated on the system visibly incorporating what the user tells it,
+    and a tool that is not used has no accuracy worth discussing.</dd>
+
+    <dt>Recoverable &middot; wrong action taken confidently</dt>
+    <dd>A stale fact served without a date is worse than no fact. In a revenue setting it
+    produces a specific, visible error in front of a buyer: pitching an integration the account
+    migrated off, addressing someone who left. The damage is to trust in the account
+    relationship, not just to a metric.</dd>
+
+    <dt>Unrecoverable &middot; disclosure and retention failure</dt>
+    <dd>Returning one tenant's memory to another, or being unable to honour an erasure request,
+    cannot be corrected after the fact. No later improvement undoes the disclosure. These two
+    are why the architecture treats isolation and deletion as invariants rather than features,
+    and why the handbook makes both non-negotiable gates.</dd>
+  </dl>
+</div>
+
+<h2>4. Constraints</h2>
+
+<p><span class="tag assumption">assumption</span> Every number below is a target I am setting
+now so that Deliverable 3 has something to measure against and Deliverable 4 has something to
+design against. None is measured. All are revisable with a recorded reason.</p>
+
+<table>
+  <thead><tr><th style="width:20%">Constraint</th><th style="width:26%">Target</th><th>Why this number</th></tr></thead>
+  <tbody>
+    <tr><td><b>Context</b></td><td>&le; 2,000 tokens of a 16,000-token working context</td><td>About 12%. Instructions, tool definitions, and the turn itself need the rest.</td></tr>
+    <tr><td><b>Latency</b></td><td>p95 &le; 300 ms for retrieve, rank, and construct</td><td>Must fit inside a roughly 3 s agent turn without being the visible bottleneck.</td></tr>
+    <tr><td><b>Cost</b></td><td>&le; 15% of per-turn token spend</td><td>Above this the feature is hard to justify in a per-seat product.</td></tr>
+    <tr><td><b>Data</b></td><td>50 tenants &times; 200 users &times; 10<sup>4</sup> memories &asymp; 10<sup>8</sup> total</td><td>Mid-market B2B SaaS deployment.</td></tr>
+    <tr><td><b>Privacy</b></td><td>Deletion &le; 60 s typical, &le; 24 h guaranteed and tested</td><td>A guarantee I can actually meet beats one I cannot.</td></tr>
+    <tr><td><b>Isolation</b></td><td>Zero cross-tenant reads, tested adversarially</td><td>Section 3 admits no tolerance here.</td></tr>
+    <tr><td><b>Correctness</b></td><td>Beat the naive baseline on a fixed evaluation set</td><td>Improvement is not a well-formed claim without a fixed distribution.</td></tr>
+    <tr><td><b>Time</b></td><td>Single engineer, part time, roughly 8 weeks</td><td>Forces the non-goals in section 7 to be real.</td></tr>
+  </tbody>
+</table>
+
+<p>The first three constraints pull against correctness. Budget, latency, and cost all push
+toward retrieving less; correctness pushes toward retrieving more.
+<span class="tag inference">inference</span> Ranking quality is the only thing that buys
+correctness without spending budget, which is why it is the component most worth investing
+effort in, and why a design that spends its complexity elsewhere is probably mis-allocated.</p>
+
+<h2>5. Prior approaches and the assumption each makes</h2>
+
+<p>Summary only. Full assumption decomposition, worked failure traces, and the failure taxonomy
+are in <span class="mono">failure_analysis.md</span>.</p>
+
+<table class="tight">
+  <thead><tr><th style="width:19%">Approach</th><th style="width:32%">Load-bearing assumption</th><th>Where it breaks</th></tr></thead>
+  <tbody>
+    <tr><td><b>A. Stateless prompting</b></td><td>Corrections are a property of the conversation, not of the world</td><td>The same correction is re-issued every session and never takes effect</td></tr>
+    <tr><td><b>B. Full conversation replay</b></td><td>Attention is a sufficient relevance mechanism, so no explicit selection is needed</td><td>O(n&sup2;) prompt cost against a linear conversation; recall degrades for facts in the middle of the input; stale and current facts carry equal weight</td></tr>
+    <tr><td><b>C. Rolling summarisation</b></td><td>Compression losses are unimportant and summariser errors do not accumulate</td><td>Single-mention high-stakes facts are dropped preferentially and irreversibly; each round re-ingests the last, so hedged claims harden into asserted ones</td></tr>
+    <tr><td><b>D. Retrieval-only (single-signal)</b></td><td>Similarity to the query is an adequate proxy for what belongs in context</td><td>Similarity ranks wording, not validity, so a superseded fact outranks the current one; chunks invert out of context; no admission, deletion, or isolation path</td></tr>
+    <tr><td><b>E. Long context as substitute</b></td><td>A window is a place to keep things</td><td>A window is per-request working memory with no persistence, write path, deletion semantics, tenant boundary, or audit trail, at any size</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <span class="label">The one that matters most</span>
+  <p>Approach E is the common objection to building any of this, and it is the one worth
+  answering precisely. <span class="tag verified">verified</span> Liu et al.
+  (arXiv:2307.03172) show that usable recall from long contexts is position-dependent and
+  worst in the middle, so effective capacity is smaller than nominal capacity.
+  <span class="tag inference">inference</span> But the deeper error is categorical, not
+  quantitative. Growing the window changes the <i>size</i> of the selection budget and nothing
+  else about the problem's structure. It does not touch persistence, lifecycle, isolation, or
+  observability, because a context window has none of those properties at any size.</p>
+</div>
+
+<h2>6. Failure evidence</h2>
+
+<p>Two representative traces. The full set of eleven, with the assumption each violates and
+whether it is recoverable, is in <span class="mono">failure_analysis.md</span>.</p>
+
+<h3>6.1 Similarity ranks wording, not validity</h3>
+
+<p>Query: <i>"What CRM does Acme use?"</i></p>
+
+<table class="tight">
+  <thead><tr><th>Retrieved chunk</th><th style="width:14%">Date</th><th style="width:10%">Cosine</th><th style="width:16%">Truth</th></tr></thead>
+  <tbody>
+    <tr><td>"We're a Salesforce shop, everything routes through SFDC."</td><td>2025-02-11</td><td>0.91</td><td>superseded</td></tr>
+    <tr><td>"We finished the HubSpot migration last quarter."</td><td>2026-04-30</td><td>0.84</td><td>current</td></tr>
+  </tbody>
+</table>
+
+<p><span class="tag inference">inference</span> The superseded fact ranks higher because it is
+phrased more directly on-topic. This is not an embedding-quality problem. The ordering is
+correct with respect to the objective the embedder was trained on. The fix cannot live inside
+the similarity signal and has to be an explicit validity interval plus a supersession relation
+between memories. <span class="tag tomeasure">to measure</span> The exact cosine scores above are
+illustrative; the real distribution, and how often the superseded fact actually outranks the
+current one, is a number the Deliverable&nbsp;3 baseline produces on the fixed set.</p>
+
+<h3>6.2 A chunk is an utterance, and utterances invert</h3>
+
+<pre>Chunk retrieved:  "I don't think we need SSO for the pilot."
+
+Actual exchange:  AE:    Should we scope SSO into the pilot?
+                  Buyer: I don't think we need SSO for the pilot.
+                  AE:    Security will probably push back.
+                  Buyer: Fair. Put it in. Non-negotiable for prod.</pre>
+
+<p>Injected alone, the chunk asserts the opposite of the account's actual position.
+<span class="tag inference">inference</span> The unit of storage has to be an extracted, typed,
+resolved claim rather than a span of raw text. This argument is independent of every ranking
+concern above, which is why it forces a separate extraction stage rather than a better ranker.</p>
+
+<h2>7. Derived requirements</h2>
+
+<p><span class="mono">first_principles.md</span> derives ten capabilities forwards from eight
+premises about the setting, then checks that result against the failure-driven list. Both
+directions are shown there. The capabilities, in short form:</p>
+
+<table class="tight">
+  <thead><tr><th style="width:6%">ID</th><th style="width:30%">Capability</th><th>Forced by</th></tr></thead>
+  <tbody>
+    <tr><td><b>C1</b></td><td>Durable cross-session write</td><td>The model is a pure function of its context, so nothing persists unless something writes it</td></tr>
+    <tr><td><b>C2</b></td><td>Admission policy, not blanket capture</td><td>Conversation is low-precision and high-redundancy; some information is ineligible for retention</td></tr>
+    <tr><td><b>C3</b></td><td>Typed representation with provenance, confidence, validity</td><td>Utterances invert out of context; facts have validity intervals; deletion needs provenance</td></tr>
+    <tr><td><b>C4</b></td><td>Source of truth separate from a rebuildable index</td><td>Deletion must be authoritative somewhere; evaluation requires re-projection without data loss</td></tr>
+    <tr><td><b>C5</b></td><td>Multi-signal ranking with conflict resolution</td><td>Similarity cannot express validity; relevance alone over-selects duplicates</td></tr>
+    <tr><td><b>C6</b></td><td>Budgeted context construction, including ordering</td><td>Context is finite, monotonically costly, and position-sensitive</td></tr>
+    <tr><td><b>C7</b></td><td>Lifecycle: update, consolidate with citation, decay, expire, delete</td><td>The world revises facts; retention rights are revocable; redundancy accumulates</td></tr>
+    <tr><td><b>C8</b></td><td>Isolation as an invariant, not a filter</td><td>Tenants are mutually distrusting and share infrastructure</td></tr>
+    <tr><td><b>C9</b></td><td>Decision observability</td><td>Stage decisions are not visible in the output, so failures cannot be localised without traces</td></tr>
+    <tr><td><b>C10</b></td><td>Reproducible offline evaluation against the baseline</td><td>Retrieval quality is distributional, not per-query</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <span class="label">A finding about method</span>
+  <p>C9 and C10 do not appear anywhere in the failure-driven derivation. They arrive only from
+  the forwards derivation. <span class="tag inference">inference</span> Breaking four prior
+  designs surfaces the failures those designs can <i>exhibit</i>, never the failures I would be
+  unable to <i>detect</i>. A capability whose absence causes silent undetectability is invisible
+  to a purely failure-driven method. That is the strongest argument for having done the
+  derivation in both directions, and it is the result I would most want challenged in review.</p>
+</div>
+
+<h3>7.1 Non-goals</h3>
+
+<p>Recorded now so that Deliverable 4 does not quietly expand into them.</p>
+
+<ul>
+  <li><b>Not a general knowledge base.</b> Only information observed in conversation. Product documentation is a separate corpus with different freshness and ownership properties.</li>
+  <li><b>Not learned retrieval.</b> Ranking signals stay hand-specified and inspectable in v1. A learned ranker needs labelled data that does not exist yet and would make C9 much harder.</li>
+  <li><b>Not cross-user shared memory.</b> Team-level memory raises consent and access-control questions the current premises do not answer. Deferred with the reason recorded.</li>
+  <li><b>Not model-agnostic in v1.</b> One provider, one embedding model, behind a swappable interface. Reproducibility requires pinning.</li>
+</ul>
+
+<h2>8. Open questions</h2>
+
+<p>These shape Deliverable 4 and are the questions I most want attacked in the design review.</p>
+
+<ol>
+  <li><b>Does typed extraction trade one failure for a worse one?</b> A wrongly extracted fact looks authoritative in a way a wrongly retrieved chunk does not. <i>Validation:</i> run both over the same transcripts in Deliverable 3 and compare the <i>character</i> of the errors, not only the rate.</li>
+  <li><b>Should supersession be inferred automatically, or should conflicting memories be injected with their dates and resolution left to the model?</b> Automatic supersession is an irreversible write based on a fallible judgement.</li>
+  <li><b>What deletion consistency window can I actually hold under load?</b> A defensible number beats an undeliverable guarantee.</li>
+  <li><b>Does write-time importance scoring earn its cost?</b> Importance is often only apparent in hindsight. <span class="tag verified">verified</span> Generative Agents scores it at write time; <span class="tag inference">inference</span> that setting has no per-seat cost pressure.</li>
+  <li><b>How large must a labelled evaluation set be before its numbers mean anything?</b> Without an answer, C10 is ceremony rather than measurement.</li>
+</ol>
+
+<hr class="footnote-rule">
+
+<h3>Sources</h3>
+<ol class="small">
+  <li>Lewis, P., Perez, E., Piktus, A., et al. <i>Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.</i> 2020. arXiv:2005.11401</li>
+  <li>Park, J. S., O'Brien, J. C., Cai, C. J., et al. <i>Generative Agents: Interactive Simulacra of Human Behavior.</i> 2023. arXiv:2304.03442</li>
+  <li>Packer, C., Wooders, S., Lin, K., et al. <i>MemGPT: Towards LLMs as Operating Systems.</i> 2023. arXiv:2310.08560</li>
+  <li>Vaswani, A., Shazeer, N., Parmar, N., et al. <i>Attention Is All You Need.</i> 2017. arXiv:1706.03762</li>
+  <li>Liu, N. F., Lin, K., Hewitt, J., et al. <i>Lost in the Middle: How Language Models Use Long Contexts.</i> 2023. arXiv:2307.03172. Not in handbook Appendix G; added because it supplies the direct evidence against Approach E.</li>
+</ol>
+
+<p class="small"><b>AI assistance disclosure.</b> Claude was used to draft and pressure-test
+prose in this document. The domain grounding, the choice of failure cases, the assumption
+decomposition, the constraint targets, and every verified / inference / assumption boundary are
+mine and are what I will defend in review. No benchmark number appears here because none has
+been measured.</p>

@@ -1,0 +1,172 @@
+<meta charset="utf-8">
+<title>Design Opportunities — Week 1 — Conversational Memory Intelligence System</title>
+<link rel="stylesheet" href="../../../_build/print.css">
+
+<div class="title-block">
+  <p class="eyebrow">Learning Through Reconstruction &middot; Deliverable 2 &middot; Week 1</p>
+  <h1>Design Opportunities</h1>
+  <p class="subtitle">What the Week&nbsp;1 research scan found, and how it should change the system.</p>
+  <div class="meta-grid">
+    <div><b>System</b> Conversational Memory Intelligence System</div>
+    <div><b>Author</b> Dheeraj Pranav</div>
+    <div><b>Format</b> 20-minute design review (not a paper presentation)</div>
+    <div><b>Date</b> 22 July 2026</div>
+    <div><b>Companions</b> component_scan.md, idea_evaluation_matrix.md, challenge_notes.md</div>
+    <div><b>Backlog</b> ../design_backlog.md &middot; ADR-001/002/003</div>
+  </div>
+</div>
+
+<div class="callout">
+  <span class="label">The one slide</span>
+  <p>The scan confirmed the Deliverable&nbsp;1 design more than it overturned it, with one sharp
+  addition. <b>Adopt a bi-temporal validity model and move conflict resolution off the ranker</b>
+  (external evidence: Zep). <b>Adopt an evaluation scaffold</b> so the non-negotiable baseline
+  comparison is buildable (LongMemEval). <b>Adopt a testable PII admission gate</b> (Presidio).
+  Prototype one admission mechanism (Mem0). Defer or reject the rest, including one SOTA result
+  that breaks a core invariant. And a real 2026 paper argues the whole system is unnecessary &mdash;
+  it is answered, and it improved the plan.</p>
+</div>
+
+<h2>1. Where the design was weakest entering the week</h2>
+
+<p>Deliverable&nbsp;1 is a first-principles specification with <b>no measured numbers</b>. The scan
+targeted its four soft spots rather than the whole landscape (handbook &sect;4.2 step&nbsp;1):</p>
+
+<table class="tight">
+  <thead><tr><th style="width:12%">Gap</th><th style="width:44%">What was under-specified or unproven</th><th>Capability</th></tr></thead>
+  <tbody>
+    <tr><td><b>G1</b></td><td>Admission mechanism: <i>how</i> store-vs-update-vs-discard and PII gating are actually done</td><td>C2</td></tr>
+    <tr><td><b>G2</b></td><td>Temporal validity asserted from first principles, with no external evidence and no measurement</td><td>C5, C3</td></tr>
+    <tr><td><b>G3</b></td><td>Consolidation &mdash; the highest-risk component (F5/F6) &mdash; had no chosen mechanism</td><td>C7</td></tr>
+    <tr><td><b>G4</b></td><td>No evaluation set exists, yet baseline comparison is a non-negotiable gate</td><td>C10</td></tr>
+  </tbody>
+</table>
+
+<h2>2. Decisions at a glance</h2>
+
+<table class="tight">
+  <thead><tr><th style="width:26%">Idea</th><th style="width:14%">Source</th><th style="width:16%">Fixes</th><th style="width:14%">Decision</th><th>One-line reason</th></tr></thead>
+  <tbody>
+    <tr><td><b>Bi-temporal validity + invalidation</b></td><td>Zep <span class="mono">2501.13956</span></td><td>F4 (G2)</td><td><span class="tag verified">adopt</span></td><td>Fixes the failure that justifies C5; low runtime cost</td></tr>
+    <tr><td><b>LongMemEval eval scaffold</b></td><td>LongMemEval <span class="mono">2410.10813</span></td><td>G4</td><td><span class="tag verified">adopt</span></td><td>De-risks the whole measurement chain; imports abstention</td></tr>
+    <tr><td><b>Presidio PII gate</b></td><td>Presidio (OSS)</td><td>F11 (G1)</td><td><span class="tag verified">adopt</span></td><td>Turns a policy into a tested, deterministic control</td></tr>
+    <tr><td><b>Mem0 operation selector</b></td><td>Mem0 <span class="mono">2504.19413</span></td><td>F8 (G1)</td><td><span class="tag assumption">prototype</span></td><td>Concrete update-vs-add, but LLM-per-candidate cost is unproven <i>here</i></td></tr>
+    <tr><td><b>A-MEM memory evolution</b></td><td>A-MEM <span class="mono">2502.12110</span></td><td>&mdash;</td><td><span class="tag inference">defer/reject</span></td><td>Mutation breaks C7 cite-don't-replace &rarr; reintroduces F5/F6</td></tr>
+    <tr><td><b>LLMLingua compression</b></td><td>LLMLingua <span class="mono">2310.05736</span></td><td>F2</td><td><span class="tag inference">reject v1</span></td><td>Marginal at a 2k-token budget over compact typed facts</td></tr>
+  </tbody>
+</table>
+
+<h2>3. Highest-value opportunity: bi-temporal validity (adopt)</h2>
+
+<div class="kv"><dl>
+  <dt>Problem addressed</dt>
+  <dd>F4 &mdash; a superseded fact served as current. <span class="tag inference">inference</span>
+  <span class="mono">first_principles.md &sect;6</span> makes the entire case for multi-signal
+  ranking (C5, the component that "does the most work") hinge on this failure being real.</dd>
+
+  <dt>Mechanism</dt>
+  <dd>Each typed fact carries <i>valid-from / valid-to</i> (world time) and <i>recorded-at /
+  invalidated-at</i> (system time). A contradicting fact <b>invalidates</b> the prior one (sets its
+  valid-to) instead of deleting it. Retrieval filters to currently-valid facts; history is kept for
+  audit and re-derivation.</dd>
+
+  <dt>Evidence, and how far it transfers</dt>
+  <dd><span class="tag verified">verified</span> Zep reports up to +18.5% on LongMemEval and DMR
+  94.8% vs 93.4% against MemGPT, crediting temporal handling.
+  <span class="tag inference">inference</span> The setting (assistant chat + business data) is
+  closer to GTM than Generative Agents' simulation but still not multi-tenant or regulated, so the
+  <i>mechanism</i> transfers while the <i>magnitude</i> does not.</dd>
+
+  <dt>The real design move</dt>
+  <dd>Not just a schema field: <b>relocate conflict resolution from the ranker to the write path.</b>
+  The ranker then only ever orders facts that are all currently valid, which is cleaner than asking
+  a relevance+recency score to encode validity &mdash; something <span class="mono">failure_analysis.md</span>
+  D-1 argued it structurally cannot do.</dd>
+
+  <dt>Why adopt the model but not the engine</dt>
+  <dd>The full Graphiti temporal knowledge graph would violate the v1 non-goal of hand-specified,
+  inspectable structure and add heavy operational surface. The bi-temporal <i>fields</i> and
+  <i>invalidation semantics</i> capture the benefit at a fraction of the cost.</dd>
+
+  <dt>Validation (bounded, in Deliverable&nbsp;3)</dt>
+  <dd>Three-arm comparison on the fixed set: naive similarity vs similarity+recency vs
+  validity-filter. Metric: how often a superseded preference is served over the current one.</dd>
+
+  <dt>What would reverse it</dt>
+  <dd><span class="tag tomeasure">to measure</span> If similarity+recency matches the validity-filter
+  on the fixed set, P4 does not force this in practice and it is downgraded to defer. This is
+  falsifier&nbsp;1 from Deliverable&nbsp;1, now wired into the Day-3 protocol.</dd>
+</dl></div>
+
+<h2>4. Two supporting adoptions</h2>
+
+<h3>4.1 LongMemEval as the evaluation scaffold (adopt taxonomy + subset, extend)</h3>
+<p>C10 needs a fixed adversarial set and baseline comparison is a non-negotiable gate. LongMemEval's
+five abilities include <b>knowledge updates</b> (= F4) and <b>abstention</b> (= cold-start /
+no-relevant). <span class="tag inference">inference</span> Adopt its taxonomy and case designs as
+the backbone; it has <b>no</b> cross-tenant (F10) or PII (F11) abilities, so those GTM-critical
+cases are authored on top. Guard: never imply its coverage extends to isolation. (ADR-002.)</p>
+
+<h3>4.2 Presidio PII gate at admission (adopt deterministic-first)</h3>
+<p>F11 is unrecoverable and needs a <i>tested</i> control. <span class="tag inference">inference</span>
+Deterministic recognizers first (cheap, no LLM on the PII path, no injection surface), NER optional
+and measured. Recognizer recall is imperfect, so deletion (C7) stays as the backstop &mdash; the gate
+is defence-in-depth, not a sole guarantee. (ADR-003.)</p>
+
+<h2>5. The challenge that made the plan better</h2>
+
+<div class="callout warn">
+  <span class="label">Steelman &mdash; "none of this is necessary"</span>
+  <p><span class="tag verified">verified</span> <i>Back to Basics</i> (arXiv:2604.11628, 2026)
+  argues the bottleneck is a <i>Signal Sparsity Effect</i>, not memory architecture, and that a
+  minimalist retrieval+generation pipeline beats stronger memory baselines on token/latency cost.
+  <span class="tag inference">inference</span> It does <b>not</b> refute this design: its benchmarks
+  are recall tasks; it says nothing about F10 cross-tenant leakage, F11 incidental PII, or F9 tested
+  deletion &mdash; the unrecoverable failures that motivate the system. A better retriever cannot
+  satisfy an isolation invariant at any accuracy.</p>
+  <p><b>But it changed two things.</b> (1) The Day-3 baseline must be a <i>strong</i> minimalist
+  retriever (Turn-Isolation Retrieval), not a straw man &mdash; a fairer, harder baseline to beat.
+  (2) It sharpened falsifier&nbsp;1: if the minimalist retriever already handles knowledge-updates
+  on the fixed set, the temporal model is not earning its cost and gets cut. I now hold the temporal
+  model as <i>adopt-pending-measurement</i>, not near-certain.</p>
+</div>
+
+<h2>6. What lands where</h2>
+
+<table class="tight">
+  <thead><tr><th style="width:30%">Into Deliverable 3 (baseline)</th><th>Into Deliverable 4 (design)</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>
+        &bull; 3-arm comparison (naive / +recency / validity)<br>
+        &bull; Strong baseline retriever (Turn-Isolation)<br>
+        &bull; Prototype + cost-measure the Mem0 selector<br>
+        &bull; Fixed set on the LongMemEval scaffold + GTM cases
+      </td>
+      <td>
+        &bull; Bi-temporal schema + invalidation (ADR-001)<br>
+        &bull; Ranker orders only currently-valid facts (B-005)<br>
+        &bull; Evaluation taxonomy (ADR-002)<br>
+        &bull; Admission PII gate + deletion backstop (ADR-003)
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<hr class="footnote-rule">
+
+<h3>Sources</h3>
+<ol class="small">
+  <li>Rasmussen, P., et al. <i>Zep: A Temporal Knowledge Graph Architecture for Agent Memory.</i> 2025. arXiv:2501.13956</li>
+  <li><i>Mem0: Building Production-Ready AI Agents with Scalable Long-Term Memory.</i> 2025. arXiv:2504.19413</li>
+  <li>Xu, W., et al. <i>A-MEM: Agentic Memory for LLM Agents.</i> 2025. arXiv:2502.12110</li>
+  <li>Wu, D., et al. <i>LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory.</i> ICLR 2025. arXiv:2410.10813</li>
+  <li>Wu, Y., et al. <i>Back to Basics: Let Conversational Agents Remember with Just Retrieval and Generation.</i> 2026. arXiv:2604.11628</li>
+  <li>Jiang, H., et al. <i>LLMLingua: Compressing Prompts for Accelerated Inference of LLMs.</i> 2023. arXiv:2310.05736</li>
+  <li>Microsoft Presidio. https://github.com/microsoft/presidio</li>
+</ol>
+
+<p class="small"><b>AI assistance disclosure.</b> Claude helped locate candidate sources and draft
+this review. The relevance judgments, the adopt/prototype/defer/reject decisions, the position
+changes recorded in <span class="mono">challenge_notes.md</span>, and every verified / inference /
+assumption / to-measure boundary are mine and are what I will defend in the design review.</p>

@@ -1,0 +1,286 @@
+/* Shared print stylesheet for AI Sprint week-5 deliverables.
+   Rendered to PDF via headless Chrome. */
+
+@page {
+  size: A4;
+  margin: 20mm 18mm 18mm 18mm;
+}
+
+:root {
+  --ink: #16181d;
+  --ink-soft: #4a5058;
+  --ink-faint: #767c85;
+  --rule: #d8dce2;
+  --rule-soft: #e9ecf0;
+  --accent: #1b4d7a;
+  --accent-soft: #eef3f8;
+  --warn-bg: #fdf6ec;
+  --warn-rule: #e0c9a3;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: "Charter", "Georgia", "Times New Roman", serif;
+  font-size: 10.2pt;
+  line-height: 1.52;
+  color: var(--ink);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Title block ---------- */
+
+.title-block {
+  border-bottom: 2.5px solid var(--ink);
+  padding-bottom: 14px;
+  margin-bottom: 26px;
+}
+
+.title-block .eyebrow {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 7.6pt;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 8px;
+}
+
+.title-block h1 {
+  font-size: 21pt;
+  line-height: 1.16;
+  margin: 0 0 6px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.title-block .subtitle {
+  font-size: 11pt;
+  color: var(--ink-soft);
+  font-style: italic;
+  margin: 0 0 12px;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px 24px;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 8.4pt;
+  color: var(--ink-soft);
+  margin-top: 12px;
+}
+
+.meta-grid b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---------- Headings ---------- */
+
+h2 {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12.6pt;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  margin: 26px 0 9px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rule);
+  break-after: avoid;
+}
+
+h3 {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 10.4pt;
+  font-weight: 700;
+  margin: 18px 0 6px;
+  break-after: avoid;
+}
+
+h4 {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 9.4pt;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin: 14px 0 5px;
+  break-after: avoid;
+}
+
+p { margin: 0 0 9px; }
+
+ul, ol { margin: 0 0 10px; padding-left: 19px; }
+li { margin-bottom: 4px; }
+li > ul, li > ol { margin-top: 4px; margin-bottom: 2px; }
+
+a { color: var(--accent); text-decoration: none; }
+
+strong { font-weight: 700; }
+
+code, .mono {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 8.6pt;
+  background: #f2f4f7;
+  padding: 0.5px 3.5px;
+  border-radius: 3px;
+}
+
+pre {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 8.2pt;
+  line-height: 1.45;
+  background: #f6f8fa;
+  border: 1px solid var(--rule-soft);
+  border-radius: 4px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  break-inside: avoid;
+  margin: 0 0 12px;
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+
+/* ---------- Tables ---------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8.8pt;
+  margin: 0 0 14px;
+  break-inside: avoid;
+}
+
+thead th {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 7.6pt;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--ink-soft);
+  border-bottom: 1.5px solid var(--ink);
+  padding: 5px 8px 5px 0;
+  vertical-align: bottom;
+}
+
+tbody td {
+  border-bottom: 1px solid var(--rule-soft);
+  padding: 6px 8px 6px 0;
+  vertical-align: top;
+}
+
+tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
+
+td:last-child, th:last-child { padding-right: 0; }
+
+table.tight td, table.tight th { font-size: 8.2pt; }
+
+/* ---------- Callouts ---------- */
+
+.callout {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 9px 13px;
+  margin: 0 0 14px;
+  font-size: 9.4pt;
+  break-inside: avoid;
+}
+
+.callout.warn {
+  border-left-color: #b4801f;
+  background: var(--warn-bg);
+}
+
+.callout p:last-child { margin-bottom: 0; }
+
+.callout .label {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 7.4pt;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 4px;
+}
+.callout.warn .label { color: #8a6014; }
+
+/* ---------- Evidence tags ---------- */
+
+.tag {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 6.8pt;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1.5px 5px;
+  border-radius: 2.5px;
+  vertical-align: 1.5px;
+  white-space: nowrap;
+}
+.tag.verified   { background: #e3f0e6; color: #2c6238; }
+.tag.inference  { background: #e8ecf5; color: #35497e; }
+.tag.assumption { background: #f6ecd9; color: #7d5a12; }
+.tag.tomeasure  { background: #f3e3e3; color: #8a2e2e; }
+.tag.pref       { background: #f0e9f3; color: #66427a; }
+
+/* ---------- Timeline ---------- */
+
+.era {
+  break-inside: avoid;
+  margin-bottom: 20px;
+  padding-left: 18px;
+  border-left: 2px solid var(--rule);
+  position: relative;
+}
+.era::before {
+  content: "";
+  position: absolute;
+  left: -5.5px;
+  top: 5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.era .era-head {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 10.2pt;
+  font-weight: 700;
+  margin: 0 0 1px;
+}
+.era .era-when {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 7.6pt;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 7px;
+}
+.chain {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 8.2pt;
+  background: #f6f8fa;
+  border: 1px solid var(--rule-soft);
+  border-radius: 4px;
+  padding: 7px 10px;
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+.chain .arrow { color: var(--accent); font-weight: 700; padding: 0 4px; }
+
+/* ---------- Utility ---------- */
+
+.page-break { break-before: page; }
+.avoid-break { break-inside: avoid; }
+.small { font-size: 8.6pt; color: var(--ink-soft); }
+.footnote-rule { border: none; border-top: 1px solid var(--rule); margin: 22px 0 10px; }
+
+.kv { margin: 0 0 12px; }
+.kv dt {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-top: 8px;
+}
+.kv dd { margin: 2px 0 0; }

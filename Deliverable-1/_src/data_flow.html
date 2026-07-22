@@ -1,0 +1,118 @@
+<meta charset="utf-8">
+<title>Data Flow — Conversational Memory Intelligence System</title>
+<link rel="stylesheet" href="../../_build/print.css">
+<style>
+  .seq { border: 1px solid var(--rule); border-radius: 6px; padding: 6px 0; margin: 0 0 14px; break-inside: avoid; }
+  .step { display: flex; align-items: flex-start; padding: 5px 12px; border-bottom: 1px solid var(--rule-soft); }
+  .step:last-child { border-bottom: none; }
+  .step .num { flex: 0 0 20px; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 700; font-size: 8pt; color: var(--accent); }
+  .step .who { flex: 0 0 118px; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 7.6pt; font-weight: 700; color: var(--ink); }
+  .step .what { flex: 1 1 auto; font-size: 8.8pt; }
+  .step .what .cap { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 6.6pt; letter-spacing: 0.04em; color: var(--ink-faint); text-transform: uppercase; }
+  .step.trace { background: #f4eef7; }
+  .step.trace .who { color: #66427a; }
+  .step.gate { background: var(--warn-bg); }
+  .step.gate .who { color: #8a6014; }
+  .step.txn { background: #eef1f4; }
+  .lgd { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 7.4pt; color: var(--ink-soft); margin: 0 0 12px; }
+  .lgd span { padding: 1px 6px; border-radius: 3px; margin-right: 8px; }
+</style>
+
+<div class="title-block">
+  <p class="eyebrow">Learning Through Reconstruction &middot; Deliverable 4</p>
+  <h1>Data Flow</h1>
+  <p class="subtitle">The write path, the read path, the admission decision, and the deletion cascade &mdash; step by step.</p>
+  <div class="meta-grid">
+    <div><b>System</b> Conversational Memory Intelligence System</div>
+    <div><b>Author</b> Dheeraj Pranav</div>
+    <div><b>Companions</b> architecture.pdf &middot; api_contracts.md &middot; data_model.md</div>
+    <div><b>Date</b> 22 July 2026</div>
+  </div>
+</div>
+
+<p class="lgd">
+  <span style="background:var(--accent-soft)">processing</span>
+  <span style="background:var(--warn-bg)">admission gate (TB-1)</span>
+  <span style="background:#eef1f4">transaction</span>
+  <span style="background:#f4eef7">trace / audit emit (C9)</span>
+</p>
+
+<h2>1. Write path — <span class="mono">POST /memory/admit</span></h2>
+<p>Untrusted turns become typed, screened, stored facts. Every stage emits a trace event (C9); the
+commit and its embedding are one transaction so the index never lags the source of truth.</p>
+
+<div class="seq">
+  <div class="step"><div class="num">1</div><div class="who">Agent → API</div><div class="what"><span class="cap">tenant from auth context — no tenant_id in body</span> <span class="mono">admit(account, user, session, turns[])</span></div></div>
+  <div class="step"><div class="num">2</div><div class="who">Extractor</div><div class="what">turns → candidate typed claims <span class="mono">{type, subject, content, confidence, observed_at}</span> <span class="cap">C1 · C3 · LLM · fixes F7 (chunk→fact)</span></div></div>
+  <div class="step gate"><div class="num">3</div><div class="who">PII Gate</div><div class="what">Presidio deterministic-first screen; ineligible candidates <b>blocked before storage</b> <span class="cap">C2 · F11 · hard gate — no output-path redaction (ADR-003)</span></div></div>
+  <div class="step gate"><div class="num">4</div><div class="who">Op-Selector</div><div class="what">per surviving candidate: <b>store | update | discard</b> vs current facts on (account, subject) <span class="cap">C2 · C7 · F8 · Mem0-style, prototype — see §3</span></div></div>
+  <div class="step txn"><div class="num">5</div><div class="who">Committer (txn)</div><div class="what"><b>store</b>: INSERT current fact · <b>update</b>: invalidate prior (valid_to, invalidated_at/by, status=superseded) + INSERT new · <b>discard</b>: log only <span class="cap">C3 · C7 · F4 · supersession on the write path (ADR-001)</span></div></div>
+  <div class="step txn"><div class="num">6</div><div class="who">Embedder (same txn)</div><div class="what">embed committed facts → <span class="mono">memory_embedding</span> <span class="cap">C4 · derived projection; delete later cascades here</span></div></div>
+  <div class="step trace"><div class="num">7</div><div class="who">Trace</div><div class="what">emit extract / pii / op-select / commit events under one <span class="mono">trace_id</span> <span class="cap">C9 · P7</span></div></div>
+  <div class="step"><div class="num">8</div><div class="who">API → Agent</div><div class="what"><span class="mono">{admitted[], updated[], discarded[], pii_blocked[], trace_id}</span></div></div>
+</div>
+
+<h2>2. Read path — <span class="mono">POST /memory/retrieve</span></h2>
+<p>Isolation is applied at the index scope (step 2), <b>before</b> ranking — so a foreign near-duplicate
+is never even a candidate, which is why a better embedder cannot leak it (the D3 7/11 finding).</p>
+
+<div class="seq">
+  <div class="step"><div class="num">1</div><div class="who">Agent → API</div><div class="what"><span class="cap">tenant from auth context</span> <span class="mono">retrieve(account, user, query, token_budget=2000, k=12)</span></div></div>
+  <div class="step"><div class="num">2</div><div class="who">Retriever</div><div class="what"><b>tenant+account-scoped</b> ANN over <span class="mono">memory_embedding</span>, <b>currently-valid only</b> → top-k candidates <span class="cap">C5 · C8 · F10 · isolation applied HERE (RLS + repo scope)</span></div></div>
+  <div class="step"><div class="num">3</div><div class="who">Ranker</div><div class="what">score each candidate = weighted(relevance, recency, importance-by-type, confidence) <span class="cap">C5 · hand-specified weights · conflict already resolved at write time</span></div></div>
+  <div class="step"><div class="num">4</div><div class="who">Constructor</div><div class="what">add in rank order until budget binds; position-aware ordering; if top score &lt; abstain floor → <b>abstain</b> (empty set) <span class="cap">C6 · F2/F3 · cold-start fix (D3: baseline failed 2/2)</span></div></div>
+  <div class="step trace"><div class="num">5</div><div class="who">Audit (fail-closed)</div><div class="what">write <span class="mono">access_log</span> row (returned ids); <b>no result returns without an audit row</b> <span class="cap">C8 · C9 · threat R5</span></div></div>
+  <div class="step"><div class="num">6</div><div class="who">API → Agent</div><div class="what"><span class="mono">{injected[] (ordered), abstained, dropped_for_budget[], used_tokens, trace_id}</span></div></div>
+</div>
+
+<h2>3. Op-selector decision tree (step 1.4)</h2>
+<p>The admission decision that keeps the index clean (F8) and drives supersession (F4). Marked
+<i>prototype</i>: the per-candidate LLM comparison is the ≤15%-cost-budget risk (threat R6), measured in D6.</p>
+
+<pre>
+candidate claim  (typed, PII-screened)
+│
+├─ current fact exists on (account, subject)?
+│   │
+│   ├─ NO ─────────────────────────────────────▶ STORE      new current fact
+│   │
+│   └─ YES ─ near-identical content (duplicate)? ─ YES ─────▶ DISCARD    duplicate  (F8)
+│            │
+│            └─ NO ─ contradicts the prior fact? ─ YES ─────▶ UPDATE     supersession txn:
+│                    │                                                    invalidate prior, insert new  (F4)
+│                    └─ NO (co-valid, e.g. 2nd requirement) ▶ STORE      both remain current
+│
+└─ salience &lt; floor AND type ∈ {meeting_note, chatter}? ── YES ─────────▶ DISCARD    low value  (F8)
+</pre>
+
+<h2>4. Deletion cascade &amp; the F9 window (<span class="mono">POST /deletion</span>)</h2>
+<p>The single-store choice (ADR-005) makes erasure authoritative: source and index die in the same
+transaction, so the typical consistency window is a transaction, not a cross-store gap.</p>
+
+<div class="seq">
+  <div class="step"><div class="num">t0</div><div class="who">API</div><div class="what">create <span class="mono">deletion_request</span> (status=pending, requested_at) <span class="cap">C7 · scope = subject|account|user|tenant</span></div></div>
+  <div class="step txn"><div class="num">t1</div><div class="who">Txn BEGIN</div><div class="what">resolve targets via <span class="mono">memory_source</span> provenance (find every copy)</div></div>
+  <div class="step txn"><div class="num">t2</div><div class="who">Delete facts</div><div class="what">DELETE matching <span class="mono">memory</span> rows</div></div>
+  <div class="step txn"><div class="num">t3</div><div class="who">Cascade index</div><div class="what">FK <span class="mono">ON DELETE CASCADE</span> removes <span class="mono">memory_embedding</span> <span class="cap">C4 · F9 · same txn — no lag</span></div></div>
+  <div class="step txn"><div class="num">t4</div><div class="who">Txn COMMIT</div><div class="what">set <span class="mono">completed_at</span>, status=completed</div></div>
+  <div class="step trace"><div class="num">t5</div><div class="who">API → caller</div><div class="what"><span class="mono">{deleted_count, window_ms = completed_at − requested_at}</span> — the guarantee is <b>measured</b>, not assumed</div></div>
+  <div class="step"><div class="num">t6</div><div class="who">Backstop (async)</div><div class="what">backup erasure within ≤24 h (ADR-004) — the honest edge; live store is synchronous, backups within the backstop <span class="cap">threat R3</span></div></div>
+</div>
+
+<h2>5. Consolidation — cite, don't replace (lifecycle job)</h2>
+<p>The highest-risk flow (first_principles §5): three capabilities cooperate. The guard is structural —
+a rollup memory <b>links</b> to its sources; the sources stay retrievable and deletable.</p>
+<pre>
+sources: m_a, m_b, m_c  (related current facts)
+        │
+        ▼  consolidate
+rollup memory R  ──cites──▶ consolidation_edge(R→m_a), (R→m_b), (R→m_c)
+        │
+        ├─ m_a, m_b, m_c REMAIN current & retrievable   (no loss → avoids F5)
+        └─ deleting m_b later stays authoritative        (not hidden inside R → avoids F6/F9)
+</pre>
+
+<hr class="footnote-rule">
+<p class="small"><b>AI assistance disclosure.</b> Claude helped render these flows. The sequencing, the
+op-selector logic, the isolation-before-ranking ordering, and the deletion-cascade design are mine and
+are what I will defend in review. Every step cites the capability, premise, or failure it serves.</p>
