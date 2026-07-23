@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Implementation Notes — Mnemo (rolling state)</title>
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --line:#30363d; --ink:#e6edf3; --mut:#8b949e;
+          --ok:#2ea043; --warn:#d29922; --bad:#f85149; --accent:#58a6ff; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif;}
+  .wrap{max-width:920px;margin:0 auto;padding:32px 24px 80px;}
+  h1{font-size:24px;margin:0 0 4px;}
+  h2{font-size:17px;margin:28px 0 10px;border-bottom:1px solid var(--line);padding-bottom:6px;}
+  .sub{color:var(--mut);margin:0 0 20px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:10px 0;}
+  .live{border-left:3px solid var(--ok);}
+  code{background:#1f2630;padding:1px 6px;border-radius:5px;font-size:13px;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{color:var(--mut);font-weight:600;}
+  .pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--mut);}
+  .pill.live{color:var(--ok);border-color:var(--ok);} .pill.wip{color:var(--warn);border-color:var(--warn);} .pill.gone{color:var(--bad);border-color:var(--bad);}
+  .note{color:var(--mut);font-size:13px;}
+  ul{margin:6px 0;padding-left:20px;} li{margin:3px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Implementation Notes — Mnemo</h1>
+  <p class="sub"><b>Rolling source of truth for what is LIVE right now.</b> The wiki can lag; this file
+     cannot. Read this on every session start to avoid rebuilding what exists. This is your
+     <i>git-like restart point</i>: if context is lost, this file rehydrates you.
+     Last updated: <code>2026-07-24 (D5 complete — M1/M2/M3 done)</code> · by loop: <code>M3 exit</code></p>
+
+  <!-- ───────────── ONE-LINE STATUS ───────────── -->
+  <div class="card live">
+    <b>Now in flight:</b> nothing — Deliverable 5 complete. Three build loops shipped and gated;
+       mnemo beats the D3 baseline 0/11 → 11/11 on the fixed set.<br>
+    <b>Active loop:</b> — · <b>Current milestone:</b> M1–M3 all DONE · <b>Phase:</b> hand-off to D6<br>
+    <b>Blocked on:</b> nothing. Next: D6 (Postgres+pgvector+RLS re-instatement; M4 lifecycle; M5 observability/eval).
+  </div>
+
+  <!-- ───────────── WHAT'S LIVE ───────────── -->
+  <h2>What is actually built &amp; live</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>Capability</th><th>Where (file/route/symbol)</th><th>Status</th><th>Verified by</th></tr></thead>
+      <tbody>
+        <tr><td>Genesis spine (plan, DoD, graph, gates, wiki, loops)</td><td><code>.genesis/*</code></td><td><span class="pill live">live</span></td><td>genesis.md checklist all-true</td></tr>
+        <tr><td>Measured naive baseline (the numbers to beat)</td><td><code>experiments/naive_baseline/</code></td><td><span class="pill live">live</span></td><td>D3 (Day 3)</td></tr>
+        <tr><td>Store + schema (sqlite; bi-temporal + FK cascade)</td><td><code>mnemo/store.py</code></td><td><span class="pill live">live</span></td><td>M1</td></tr>
+        <tr><td>M1 tenant isolation (constructor-scoped repo, I1)</td><td><code>mnemo/repository.py</code></td><td><span class="pill live">live</span></td><td>gate G0 (leak 0/11) + L4 9/9</td></tr>
+        <tr><td>M2 write path: PII gate (I2), typed extraction, supersession-on-write (I3)</td><td><code>mnemo/{pii_gate,extraction,admission}.py</code></td><td><span class="pill live">live</span></td><td>gate G1 (pii 0) + L4 3/3</td></tr>
+        <tr><td>M3 read path: validity-filtered ranker + abstaining injection (I4)</td><td><code>mnemo/{retrieval,ranking,injection}.py</code></td><td><span class="pill live">live</span></td><td>gate G2 (11/11) + L4 4/4</td></tr>
+        <tr><td>Baseline comparison artifact</td><td><code>implementation/eval/comparison.md</code></td><td><span class="pill live">live</span></td><td>run_comparison.py</td></tr>
+      </tbody>
+    </table>
+    <p class="note">17/17 unit tests green; gates G0/G1/G2 all exit 0. Append a row the moment a milestone passes L4 VERIFY.</p>
+  </div>
+
+  <!-- ───────────── DECISIONS THAT BIND ───────────── -->
+  <h2>Decisions that constrain new work</h2>
+  <div class="card">
+    <ul>
+      <li><code>D5-DR-001</code> — implementation substrate = pure-stdlib + <code>sqlite3</code> for the loops; Postgres+pgvector+RLS remains the production target (ADR-005), re-instated in D6 → <code>decisions/D5-DR-001-stdlib-sqlite-substrate.md</code></li>
+      <li><code>ADR-005</code> — single Postgres+pgvector store; index is a derived projection; deletion cascades in one txn → <code>../design/decision_records/ADR-005-postgres-pgvector-single-store.md</code></li>
+      <li><code>ADR-001</code> — bi-temporal validity; conflict resolution on the WRITE path, ranker orders only valid facts → <code>../design/decision_records/ADR-001/</code></li>
+      <li><code>ADR-003</code> — Presidio-style deterministic PII gate at admission → <code>../design/decision_records/ADR-003/</code></li>
+      <li><code>ADR-004</code> — small/team envelope (~2×10⁶ facts, single region) → <code>../design/decision_records/ADR-004-deployment-envelope.md</code></li>
+    </ul>
+  </div>
+
+  <!-- ───────────── DEVIATION LOG ───────────── -->
+  <h2>Deviations from plan (append-only — the "why we didn't do it the obvious way" log)</h2>
+  <div class="card">
+    <p class="note">Append a row whenever the agent couldn't follow approach A and switched to B.
+       Format: date · couldn't use X because Y · used Z instead · invariant impact.</p>
+    <table>
+      <thead><tr><th>Date</th><th>Milestone</th><th>Planned approach</th><th>Actual approach</th><th>Reason</th><th>Invariant impact</th></tr></thead>
+      <tbody>
+        <tr><td>2026-07-24</td><td>(project)</td><td>Postgres+pgvector+RLS substrate (ADR-005)</td><td>stdlib + sqlite3 substrate for loops (D5-DR-001)</td><td>services/pip blocked in loop env (PEP-668, same as D3); isolation invariant is language-level, provable on sqlite</td><td>I1–I4 provable as-is; I5 deletion-cascade provable via sqlite <code>ON DELETE CASCADE</code>; RLS defence-in-depth deferred to D6</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ───────────── KNOWN GAPS / NEXT ───────────── -->
+  <h2>Known gaps &amp; the ordered Next list</h2>
+  <div class="card">
+    <ol>
+      <li>D6 — re-instate Postgres + pgvector + RLS (ADR-005) behind the same <code>TenantRepository</code> (only <code>store.py</code> changes; invariant I6).</li>
+      <li>D6 — M4 lifecycle: deletion cascade (I5, already schema-ready) + consolidation/reflection; gate G3 (high-risk).</li>
+      <li>D6 — M5 observability + traces + 3-arm eval + R4 memory-borne prompt-injection red-team; gate G4.</li>
+      <li>Residual — subject/query normalization ("dm" → "decision maker") so q02/q06 answer instead of abstaining.</li>
+      <li>Residual — Presidio ML recognizers behind the deterministic PII floor (spelled-out-number evasion).</li>
+    </ol>
+    <p class="note">Mirror of <code>checkpoints/CURRENT.md → next_action</code>, but human-readable and durable across compaction.</p>
+  </div>
+
+  <!-- ───────────── SESSION LOG (append-only) ───────────── -->
+  <h2>Session log (append-only, newest first)</h2>
+  <div class="card">
+    <p><code>2026-07-24 (later)</code> — D5 complete. Ran three bounded BUILD loops end-to-end with computed
+       gates and independent L4 verification: M1 isolation (leak 7/11→0/11), M2 write-path+PII (exposures 3→0),
+       M3 read-path (accuracy 0/11→11/11). M3 was the high-risk loop: pre-change checkpoint taken, first G2 run
+       failed on the predicted SSO same-day tie plus an unpredicted cold-start abstain miss; a documented 5-step
+       recovery (L2 DEBUG → R1–R5) fixed both without regressing G0/G1. 17/17 tests green.</p>
+    <p><code>2026-07-24</code> — Genesis ritual run end-to-end (G0 cognitive design → G6 prime). Spine seeded
+       entirely from the D4 design: milestones = sprints S0–S2, gates = G0–G2, numbers-to-beat = the measured
+       D3 baseline. Substrate decision D5-DR-001 recorded (stdlib+sqlite for loops, Postgres+pgvector in prod).
+       Context graph carries 6 hand-written invariants (I1–I6). Next: L1 BUILD on M1.</p>
+    <p class="note">One paragraph per session: what shipped, what broke, what's next. This is the narrative the next cold session reads first.</p>
+  </div>
+
+</div>
+</body>
+</html>

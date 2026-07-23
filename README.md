@@ -48,12 +48,21 @@ to a measured failure baseline, to a complete implementable system spec.
 | **D2** | Research-to-Design Scan | `Deliverable-1/research/` | ✅ (week 1) |
 | **D3** | Productive Failure Baseline | `Deliverable-1/experiments/` | ✅ |
 | **D4** | First-Principles System Design | `Deliverable-1/design/` | ✅ |
-| D5–D8 | Genesis workflow · Implementation · Journal · Transfer | — | ⏳ |
+| **D5** | Genesis Engineering Workflow | `Deliverable-1/.genesis/` + `implementation/` | ✅ |
+| D6–D8 | Implementation+Verification · Journal · Transfer | — | ⏳ |
 
 **Headline measured result (D3):** the naive single-signal baseline passes **0 / 11** adversarial
 queries — supersession failure **0.80**, cross-tenant leak on **7/11**, **3** PII exposures — while
 being fast (p95 ≈ 0.05 ms) and far under budget. The failures are **structural**, not a
 retrieval-tuning problem, which is exactly what the D4 architecture is designed to fix.
+
+**Headline built result (D5):** the designed system — built across three bounded, gated Genesis loops —
+passes **11 / 11** on the *same* fixed set: supersession **0.80 → 0**, cross-tenant leak **7/11 → 0**,
+PII exposures **3 → 0**, cold-start abstention **1.0 → 0**. Every gate is a runnable script
+(`implementation/gates/*.py`); isolation is a *constructor-scoped invariant* (no method can express a
+cross-tenant read), conflict resolution lives on the write path, and injection abstains rather than
+guesses. Reproduce with no install / no network:
+`python3 -m unittest discover -s Deliverable-1/implementation/tests` + the three gate scripts.
 
 ## Repository layout
 
@@ -63,6 +72,8 @@ Deliverable-1/          the project (all sub-deliverables in subfolders)
 ├── research/           D2 — research-to-design scan, ADRs, design backlog
 ├── experiments/        D3 — the naive baseline, dataset, measured results, failure report
 ├── design/             D4 — system design, architecture, data model, API, threat model, sprint plan
+├── .genesis/           D5 — the Genesis spine (plan, definition-of-done, gates, checkpoints, decisions)
+├── implementation/     D5→D6 — mnemo source (store, repository, admission, ranking), tests, runnable gates
 ├── journal/            dated work-session notes
 └── PROGRESS.md         running build log
 _build/                 HTML → PDF render pipeline (headless Chrome + shared print CSS)

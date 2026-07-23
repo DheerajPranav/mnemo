@@ -1,0 +1,45 @@
+{
+  "$comment": "Per-project causal/dependency graph. nodes=modules, edges=[cause,effect] where cause is imported-by effect. invariants=health rules the L4 verifier checks BEFORE declaring a milestone done. Seeded from the D4 design (design/*); the naive_baseline.* nodes are the D3 baseline that the built system must beat. Regenerate the skeleton with tools/graphizer.mjs; invariants added by hand.",
+  "project": "Mnemo",
+  "generated": "2026-07-24T00:00:00Z",
+  "nodes": [
+    "mnemo.store",
+    "mnemo.repository",
+    "mnemo.extraction",
+    "mnemo.pii_gate",
+    "mnemo.admission",
+    "mnemo.retrieval",
+    "mnemo.ranking",
+    "mnemo.injection",
+    "mnemo.trace",
+    "mnemo.eval_harness",
+    "naive_baseline.baseline",
+    "naive_baseline.evaluate"
+  ],
+  "edges": [
+    ["mnemo.store", "mnemo.repository"],
+    ["mnemo.repository", "mnemo.admission"],
+    ["mnemo.repository", "mnemo.retrieval"],
+    ["mnemo.extraction", "mnemo.admission"],
+    ["mnemo.pii_gate", "mnemo.admission"],
+    ["mnemo.trace", "mnemo.admission"],
+    ["mnemo.retrieval", "mnemo.ranking"],
+    ["mnemo.ranking", "mnemo.injection"],
+    ["mnemo.trace", "mnemo.injection"],
+    ["mnemo.admission", "mnemo.eval_harness"],
+    ["mnemo.injection", "mnemo.eval_harness"],
+    ["naive_baseline.baseline", "mnemo.eval_harness"]
+  ],
+  "invariants": {
+    "I1_tenant_isolation": "No repository method accepts tenant_id as a parameter — tenant is a constructor argument, bound once. Every SQL read and write is scoped by that constructor-bound tenant_id. Consequence checked by the verifier: 0 cross-tenant rows in any retrieval result on the D3 fixed set. Closes F10.",
+    "I2_pii_hard_gate": "The PII gate is a hard admission precondition. No memory row is persisted whose candidate text trips the deterministic PII detector; blocked content leaves zero trace (no row, no embedding, no log payload). Closes F11.",
+    "I3_validity_filter": "The ranker only ever orders currently-valid facts (valid_to IS NULL AND invalidated_at IS NULL). Superseded facts are invalidated on the WRITE path; a stale fact can never out-rank its successor because it is never a candidate. Closes F4; implements ADR-001.",
+    "I4_budget_and_abstain": "Injected context never exceeds TOKEN_BUDGET (2000). When no candidate clears the abstain threshold, the system abstains (returns nothing) rather than padding the top-k with filler. Closes F8.",
+    "I5_deletion_cascade": "A delete removes the fact and its embedding row in a single transaction (ON DELETE CASCADE); no derived projection outlives its source. Collapses the F9 consistency window to a transaction (ADR-005).",
+    "I6_domain_purity": "Domain modules (repository, ranking, admission, retrieval) import no web framework and no concrete DB driver directly — storage detail (sqlite3 today, Postgres+pgvector in prod per ADR-005) sits behind mnemo.store. Dependency direction is inward; zero cycles."
+  },
+  "freeze_boundary": [
+    "$comment: globs the driver may edit; everything else is off-limits without explicit user request",
+    "implementation/**"
+  ]
+}

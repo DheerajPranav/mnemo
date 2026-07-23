@@ -6,7 +6,7 @@ One section per work day. Newest day at the top of the day list.
 - **Repo:** `Deliverable-1/` (the whole project; 8 handbook sub-deliverables live in its subfolders)
 - **Handbook:** `../deliverable_1.pdf` (v1.0, June 2026)
 - **Author:** Dheeraj Pranav
-- **This run's scope:** Day 1 = verify/polish Deliverable 1 · Day 2 = Deliverable 2 (Research-to-Design Scan) · Day 3 = Deliverable 3 (Productive Failure Baseline)
+- **This run's scope:** Day 1 = verify/polish Deliverable 1 · Day 2 = Deliverable 2 (Research-to-Design Scan) · Day 3 = Deliverable 3 (Productive Failure Baseline) · Day 4 = Deliverable 4 (System Design) · Day 5 = Deliverable 5 (Genesis Engineering Workflow)
 
 > Convention: this log records *what was done, decisions made, commands run, and blockers*.
 > It is deliberately terse. The narrative reasoning for each session lives in `journal/YYYY-MM-DD.md`.
@@ -200,3 +200,50 @@ and D6 (implementation + verification).
 
 **D2 note:** week-1 is a complete instance of the *recurring* Weekly scan; not manufacturing a week-2
 now — resume on the next real cycle, targeted by D4's least-certain component (op-selector cost).
+
+---
+
+## Day 5 — 2026-07-24 — Deliverable 5: Genesis Engineering Workflow
+
+**Status:** ✅ **DONE.** Spine initialised + seeded from D4; three bounded build loops shipped, each
+gated and independently verified. Headline: the built system beats the D3 baseline **0/11 → 11/11**.
+
+**Genesis ritual (G0–G6):** ran the `genesis` kit → `.genesis/` spine. Cognitive job + 3-approach
+brainstorm (chose stdlib/sqlite substrate, **D5-DR-001**) + context graph with **6 invariants I1–I6** +
+wiki pointers + definition-of-done gates + 3 milestones (each a runnable demo command) + kickoff. The
+milestones ARE sprints S0–S2, the gates ARE G0–G2, the numbers-to-beat ARE the measured D3 baseline.
+
+**Three build loops (maker≠checker; gates computed, not narrated):**
+| Loop | Invariant | Gate result vs baseline | L4 verify |
+| :-- | :-- | :-- | :-- |
+| M1 isolation (S0) | I1 constructor-scoped repo | cross-tenant leak **7/11 → 0/11** | 9/9 attacks blocked |
+| M2 write path + PII (S1) | I2 hard PII gate, I3 validity-on-write | PII exposures **3 → 0** (1 blocked, 0 over-blocks) | 3/3 + honest residual |
+| M3 read path (S2, high-risk) | I3 validity filter, I4 budget/abstain | accuracy **0/11 → 11/11**, supers. 0.80→0.0, inv 1→0, leak 7→0, pii 3→0, cold-start 1.0→0.0 | 4/4 attacks blocked |
+
+**§7.3 evidence — all present:** ≥3 loops (M1/M2/M3) · DoD per milestone (DONE.html §2 + per-gate
+scripts) · **checkpoint before a high-risk change** (`M3-pre-highrisk.md`) · **documented recovery**
+(M3: predicted SSO same-`recorded_at` tie + unpredicted cold-start miss → L2 DEBUG → 5 principled
+revisions R1–R5, G0/G1 green throughout) · verification linked from each gate (`checkpoints/M*.md`) ·
+current implementation-notes + context-graph.
+
+**Commands run (reproducible, no install/network):**
+```bash
+bash ../tools/genesis-kit/tools/scaffold.sh . Mnemo --cheap-model claude-haiku-4-5 \
+     --flagship-model claude-opus-4-8 --router-skill agentic-swe-master --budget 50000 --max-iters 10
+node ../tools/genesis-kit/tools/graphizer.mjs . --write
+python3 -m unittest discover -s implementation/tests            # 17/17 OK
+python3 implementation/gates/gate_g0_isolation.py               # exit 0
+python3 implementation/gates/gate_g1_pii.py                     # exit 0
+python3 implementation/gates/gate_g2_baseline.py                # exit 0
+python3 implementation/eval/run_comparison.py                  # → eval/comparison.md
+```
+
+**Decisions:** isolation as a *language-level* invariant (constructor arg, statically enforced) not a
+runtime check; conflict resolution on the write path so stale facts are never candidates (adversarially
+verified — even their exact text can't surface them); sqlite substrate for the loops, Postgres+pgvector
++RLS re-instated in D6 (D5-DR-001). **Honest residuals** logged for D6: spelled-out-number PII evasion;
+q02/q06 abstain (subject-abbreviation "dm") — recall@k is 1.0, the fact is in top-k but below the
+abstain threshold, so the system correctly declines rather than guesses.
+
+**Feeds D6:** M4 lifecycle (deletion/consolidation, gate G3, high-risk) + M5 observability/eval + R4
+prompt-injection red-team (gate G4) + the Postgres migration behind the same `TenantRepository`.
