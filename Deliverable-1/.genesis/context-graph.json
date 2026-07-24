@@ -13,6 +13,10 @@
     "mnemo.injection",
     "mnemo.trace",
     "mnemo.eval_harness",
+    "mnemo.lifecycle",
+    "mnemo.consolidation",
+    "mnemo.eval_3arm",
+    "mnemo.red_team",
     "naive_baseline.baseline",
     "naive_baseline.evaluate"
   ],
@@ -28,7 +32,13 @@
     ["mnemo.trace", "mnemo.injection"],
     ["mnemo.admission", "mnemo.eval_harness"],
     ["mnemo.injection", "mnemo.eval_harness"],
-    ["naive_baseline.baseline", "mnemo.eval_harness"]
+    ["mnemo.repository", "mnemo.lifecycle"],
+    ["mnemo.repository", "mnemo.consolidation"],
+    ["mnemo.trace", "mnemo.retrieval"],
+    ["mnemo.injection", "mnemo.eval_3arm"],
+    ["mnemo.admission", "mnemo.red_team"],
+    ["naive_baseline.baseline", "mnemo.eval_harness"],
+    ["naive_baseline.baseline", "mnemo.eval_3arm"]
   ],
   "invariants": {
     "I1_tenant_isolation": "No repository method accepts tenant_id as a parameter — tenant is a constructor argument, bound once. Every SQL read and write is scoped by that constructor-bound tenant_id. Consequence checked by the verifier: 0 cross-tenant rows in any retrieval result on the D3 fixed set. Closes F10.",
@@ -36,7 +46,10 @@
     "I3_validity_filter": "The ranker only ever orders currently-valid facts (valid_to IS NULL AND invalidated_at IS NULL). Superseded facts are invalidated on the WRITE path; a stale fact can never out-rank its successor because it is never a candidate. Closes F4; implements ADR-001.",
     "I4_budget_and_abstain": "Injected context never exceeds TOKEN_BUDGET (2000). When no candidate clears the abstain threshold, the system abstains (returns nothing) rather than padding the top-k with filler. Closes F8.",
     "I5_deletion_cascade": "A delete removes the fact and its embedding row in a single transaction (ON DELETE CASCADE); no derived projection outlives its source. Collapses the F9 consistency window to a transaction (ADR-005).",
-    "I6_domain_purity": "Domain modules (repository, ranking, admission, retrieval) import no web framework and no concrete DB driver directly — storage detail (sqlite3 today, Postgres+pgvector in prod per ADR-005) sits behind mnemo.store. Dependency direction is inward; zero cycles."
+    "I6_domain_purity": "Domain modules (repository, ranking, admission, retrieval) import no web framework and no concrete DB driver directly — storage detail (sqlite3 today, Postgres+pgvector in prod per ADR-005) sits behind mnemo.store. Dependency direction is inward; zero cycles.",
+    "I7_deletion_is_real": "[D6/M4] A deletion removes the fact from source storage AND every retrieval path in one transaction; the embedding projection cascades. The deletion_request row records requested_at/completed_at so the F9 consistency window is MEASURED, not hoped for. Delete-then-requery must return nothing.",
+    "I8_consolidation_cites_never_replaces": "[D6/M4] A rollup memory CITES its sources via consolidation_edge and never deletes or invalidates them: every source stays independently retrievable and the rollup is re-derivable from them. Guards F5 (loss on summarisation) and F6 (drift). Corollary: an incorrectly invalidated fact is recoverable from history (ADR-001 residual).",
+    "I9_audit_fails_closed": "[D6/M5] Every retrieval writes exactly one access_log row before results are returned; if the audit write fails, the read fails closed (no result without a log row) — threat R5. Every decision (candidates, per-signal scores, budget drops, PII suppressions, final set) is reconstructable from the trace for its request_id (C9)."
   },
   "freeze_boundary": [
     "$comment: globs the driver may edit; everything else is off-limits without explicit user request",

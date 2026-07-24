@@ -139,3 +139,95 @@ class TenantRepository:
         return self._conn.execute(
             "SELECT COUNT(*) AS n FROM memory WHERE tenant_id = ?", self._scope()
         ).fetchone()["n"]
+
+    # ── [M4] history / correction ───────────────────────────────────────────────
+    def invalidated_facts(self):
+        """Facts this tenant has invalidated — the history a correction can be recovered from
+        (the ADR-001 residual: an *incorrectly* invalidated fact must not be lost)."""
+        rows = self._conn.execute(
+            """SELECT * FROM memory WHERE tenant_id = ? AND invalidated_at IS NOT NULL
+                 ORDER BY seq""", self._scope()
+        ).fetchall()
+        return [_row_to_fact(r) for r in rows]
+
+    def restore(self, memory_id: str) -> None:
+        """Undo an invalidation (correction recovery). Tenant-scoped, so only this tenant's row."""
+        self._conn.execute(
+            """UPDATE memory SET valid_to = NULL, invalidated_at = NULL, invalidated_by = NULL
+                 WHERE id = ? AND tenant_id = ?""", (memory_id, self._tenant_id)
+        )
+
+    def facts_matching(self, *, scope: str, target_ref: str):
+        """Facts selected by a deletion scope. `scope` is a column name, never a tenant."""
+        if scope not in ("account", "subject", "actor"):
+            raise ValueError(f"unsupported deletion scope: {scope}")
+        rows = self._conn.execute(
+            f"SELECT * FROM memory WHERE tenant_id = ? AND {scope} = ?",
+            (self._tenant_id, target_ref),
+        ).fetchall()
+        return [_row_to_fact(r) for r in rows]
+
+    # ── [M4] derived projection (embedding) ─────────────────────────────────────
+    def add_embedding(self, memory_id: str, vec: str) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO memory_embedding (memory_id, vec) VALUES (?,?)", (memory_id, vec)
+        )
+
+    def embedding_count_for(self, memory_ids) -> int:
+        """How many embedding rows survive for these ids — proves the ON DELETE CASCADE (I7)."""
+        if not memory_ids:
+            return 0
+        qs = ",".join("?" * len(memory_ids))
+        return self._conn.execute(
+            f"SELECT COUNT(*) AS n FROM memory_embedding WHERE memory_id IN ({qs})",
+            tuple(memory_ids),
+        ).fetchone()["n"]
+
+    # ── [M4] consolidation edges (cite, never replace — I8) ─────────────────────
+    def add_consolidation_edge(self, *, consolidated_id: str, source_id: str, at: str) -> None:
+        self._conn.execute(
+            """INSERT OR IGNORE INTO consolidation_edge (consolidated_id, source_id, created_at)
+                 VALUES (?,?,?)""", (consolidated_id, source_id, at)
+        )
+
+    def sources_for(self, consolidated_id: str):
+        """The memories a rollup cites. Join is tenant-scoped through `memory`."""
+        rows = self._conn.execute(
+            """SELECT m.* FROM consolidation_edge e JOIN memory m ON m.id = e.source_id
+                 WHERE e.consolidated_id = ? AND m.tenant_id = ? ORDER BY m.seq""",
+            (consolidated_id, self._tenant_id),
+        ).fetchall()
+        return [_row_to_fact(r) for r in rows]
+
+    # ── [M4] deletion requests — measure the F9 window, don't hope for it ───────
+    def open_deletion_request(self, *, scope: str, target_ref: str, at: str) -> int:
+        cur = self._conn.execute(
+            """INSERT INTO deletion_request (tenant_id, scope, target_ref, requested_at, status)
+                 VALUES (?,?,?,?,'pending')""", (self._tenant_id, scope, target_ref, at)
+        )
+        return cur.lastrowid
+
+    def complete_deletion_request(self, request_id: int, *, at: str, window_ms: float) -> None:
+        self._conn.execute(
+            """UPDATE deletion_request SET completed_at = ?, window_ms = ?, status = 'completed'
+                 WHERE id = ? AND tenant_id = ?""", (at, window_ms, request_id, self._tenant_id)
+        )
+
+    def deletion_request(self, request_id: int):
+        return self._conn.execute(
+            "SELECT * FROM deletion_request WHERE id = ? AND tenant_id = ?",
+            (request_id, self._tenant_id),
+        ).fetchone()
+
+    # ── [M5] audit log — every read leaves a row, or the read fails closed (I9) ──
+    def log_access(self, *, request_id: str, user_id, returned_memory_ids, at: str) -> None:
+        self._conn.execute(
+            """INSERT INTO access_log (request_id, tenant_id, user_id, returned_memory_ids, occurred_at)
+                 VALUES (?,?,?,?,?)""",
+            (request_id, self._tenant_id, user_id, ",".join(returned_memory_ids), at),
+        )
+
+    def access_logs(self):
+        return self._conn.execute(
+            "SELECT * FROM access_log WHERE tenant_id = ? ORDER BY id", self._scope()
+        ).fetchall()

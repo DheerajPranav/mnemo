@@ -1,0 +1,29 @@
+{
+  "1_naive": {
+    "overall_accuracy": 0.0,
+    "recall_at_k": 0.333,
+    "supersession_failure_rate": 0.8,
+    "inversion_failures": 1,
+    "cross_tenant_leak_queries": 7,
+    "pii_exposure_count": 3,
+    "coldstart_abstention_failure_rate": 1.0
+  },
+  "2_recency": {
+    "overall_accuracy": 0.0,
+    "recall_at_k": 0.333,
+    "supersession_failure_rate": 0.8,
+    "inversion_failures": 1,
+    "cross_tenant_leak_queries": 10,
+    "pii_exposure_count": 3,
+    "coldstart_abstention_failure_rate": 1.0
+  },
+  "3_validity_filter": {
+    "overall_accuracy": 1.0,
+    "recall_at_k": 0.778,
+    "supersession_failure_rate": 0.0,
+    "inversion_failures": 0,
+    "cross_tenant_leak_queries": 0,
+    "pii_exposure_count": 0,
+    "coldstart_abstention_failure_rate": 0.0
+  }
+}

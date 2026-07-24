@@ -38,6 +38,38 @@ CREATE TABLE IF NOT EXISTS memory_embedding (
     vec       TEXT NOT NULL,                   -- serialized sparse tf-idf (placeholder for pgvector)
     FOREIGN KEY (memory_id) REFERENCES memory(id) ON DELETE CASCADE
 );
+
+-- [M4] consolidation_edge — a rollup memory CITES its sources; it never replaces them (C7, F5/F6).
+CREATE TABLE IF NOT EXISTS consolidation_edge (
+    consolidated_id TEXT NOT NULL,             -- the summary/rollup memory
+    source_id       TEXT NOT NULL,             -- a memory it cites
+    created_at      TEXT NOT NULL,
+    PRIMARY KEY (consolidated_id, source_id),
+    FOREIGN KEY (consolidated_id) REFERENCES memory(id) ON DELETE CASCADE,
+    FOREIGN KEY (source_id)       REFERENCES memory(id) ON DELETE CASCADE
+);
+
+-- [M5] access_log — one row per retrieval; reconstruct who saw what, prove no cross-tenant read (C8/C9).
+CREATE TABLE IF NOT EXISTS access_log (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id          TEXT NOT NULL,         -- joins to the decision trace
+    tenant_id           TEXT NOT NULL,
+    user_id             TEXT,
+    returned_memory_ids TEXT NOT NULL,         -- exactly what was injected (comma-joined)
+    occurred_at         TEXT NOT NULL
+);
+
+-- [M4] deletion_request — erasure job; completed_at - requested_at IS the measured F9 window (C7).
+CREATE TABLE IF NOT EXISTS deletion_request (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id    TEXT NOT NULL,
+    scope        TEXT NOT NULL,                -- subject | account | user | tenant
+    target_ref   TEXT NOT NULL,
+    requested_at TEXT NOT NULL,
+    completed_at TEXT,
+    window_ms    REAL,                         -- completed - requested, in ms (proves the window)
+    status       TEXT NOT NULL DEFAULT 'pending'  -- pending | completed | failed
+);
 """
 
 

@@ -15,7 +15,7 @@ SUPERSESSION RULE — see `_supersedes`. This is the one design knob the M3 read
 from dataclasses import dataclass, field
 from typing import List, Tuple
 
-from . import extraction, pii_gate
+from . import extraction, injection_guard, pii_gate
 
 
 @dataclass
@@ -24,6 +24,7 @@ class AdmitResult:
     stored: bool
     reason: str = "admitted"
     pii_entities: List[Tuple[str, str]] = field(default_factory=list)
+    injection_labels: List[str] = field(default_factory=list)  # T4/R4 patterns that fired, if any
     invalidated: List[str] = field(default_factory=list)     # existing ids this admit superseded
     admitted_stale: bool = False                             # new fact arrived already-superseded
 
@@ -52,17 +53,32 @@ def admit(repo, record, seq):
         return AdmitResult(id=record["id"], stored=False, reason="pii-blocked",
                            pii_entities=[(lbl, "<redacted>") for lbl, _ in entities])
 
+    # ── T4/R4: overt memory-borne prompt injection is not a fact about the account ──
+    planted = injection_guard.detect(text)
+    if planted:
+        return AdmitResult(id=record["id"], stored=False, reason="injection-blocked",
+                           injection_labels=[lbl for lbl, _ in planted])
+
     fields = extraction.extract(record)
     new_at, new_seq = fields["recorded_at"], seq
 
     # ── I3: resolve conflicts on the write path ──
-    conflicts = repo.find_current_conflict(account=fields["account"], subject=fields["subject"])
+    # Supersession applies ONLY to slot-valued types (fact/preference), where a newer entry replaces
+    # the previous value. `event` memories accumulate — a call note or thread turn does not contradict
+    # its predecessor, and superseding them destroys legitimate history (F5). [D6/M4 fix]
+    if fields["mem_type"] in extraction.SUPERSEDING_TYPES:
+        conflicts = repo.find_current_conflict(account=fields["account"], subject=fields["subject"])
+    else:
+        conflicts = []
 
     repo.add_fact(
         id=fields["id"], account=fields["account"], subject=fields["subject"],
         mem_type=fields["mem_type"], text=fields["text"], recorded_at=fields["recorded_at"],
         seq=seq, actor=fields["actor"], provenance=fields["provenance"],
     )
+    # The index is a DERIVED PROJECTION of the fact (ADR-005): written here, cascaded away on delete
+    # (invariant I5/I7), and rebuildable from `memory` alone. Placeholder vector = normalised tokens.
+    repo.add_embedding(fields["id"], " ".join(sorted(set(fields["text"].lower().split()))))
 
     invalidated = []
     admitted_stale = False

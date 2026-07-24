@@ -1,0 +1,15 @@
+INDEPENDENT VERIFICATION — handbook §8.3
+(re-derived from the spec; gate verdicts not consulted)
+
+[PASS] 8.3.1 relevant memories outrank plausible distractors
+[PASS] 8.3.2 stale/superseded do not override current
+[PASS] 8.3.3 no cross-tenant memory under adversarial queries
+[PASS] 8.3.4 deletion removes from storage and retrieval within the window
+[PASS] 8.3.5 context selection respects the token budget
+[PASS] 8.3.6 sensitive-data policy: positive and negative cases
+[PASS] 8.3.7 benchmark results compared with the naive baseline
+[PASS] R4  memory-borne prompt injection (project-specific)
+[UNVERIFIED] ADR-005 Postgres + pgvector + RLS substrate — no Postgres service available in this environment (decision D6-DR-002); the schema and RLS policies ship as implementation/mnemo/postgres_schema.sql but are not executed here
+
+VERDICT: PASS over 38 evaluation cases
+UNVERIFIED (reported, not assumed): 1

@@ -101,11 +101,17 @@ def main():
         f.write("| Metric | Baseline | Mnemo | Direction |\n|:--|:--:|:--:|:--|\n")
         for name, b, m, d in rows:
             f.write(f"| {name} | {b} | **{m}** | {d} |\n")
-        f.write("\nEvery failure the read path is responsible for is closed. recall@k = 1.0 (every gold "
-                "is retrieved into top-k). On q02/q06 the current fact (subject `dm`) is in top-k but "
-                "its lexical confidence is below the abstain threshold, so the system abstains rather "
-                "than inject a low-confidence answer — safe, but a documented residual: subject/query "
-                "normalization (`dm` -> `decision maker`) is a D6 item.\n")
+        f.write(f"\nEvery probed failure the read path is responsible for is closed (supersession, "
+                f"inversion, cross-tenant, PII, cold-start all at 0).\n\n"
+                f"**Honest reading of recall_at_k ({mnemo['recall_at_k']}).** After the D6/M4 fix, "
+                f"`event` memories (thread turns, chatter, call notes) correctly accumulate instead of "
+                f"superseding each other, so the ranker now competes against the full ~30-fact corpus "
+                f"rather than the 9 that survived the earlier write-path defect. Recall is therefore "
+                f"lower than the D5 run's 1.0 and *more honest*: the queries that miss are the "
+                f"subject-abbreviation ones (`dm` vs \"decision maker\"), where the current fact carries "
+                f"no lexical overlap with the query. The system abstains there rather than injecting a "
+                f"low-confidence answer, so no wrong answer is produced. Subject/query normalization is "
+                f"the tracked residual.\n")
     print(f"wrote {out}")
     for name, b, m, d in rows:
         print(f"  {name:42} baseline={b:<6} mnemo={m}")

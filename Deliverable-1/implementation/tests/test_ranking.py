@@ -21,11 +21,12 @@ import _dataset
 
 
 def _pipeline():
+    """Returns (conn, repo). Callers must close conn (tests use addCleanup)."""
     conn = connect()
     repos = {}
     admission.admit_all(repos, _dataset.load_memories(), lambda t: TenantRepository(conn, t))
     conn.commit()
-    return repos["T1"]
+    return conn, repos["T1"]
 
 
 def _answer(repo, query, account):
@@ -36,7 +37,8 @@ def _answer(repo, query, account):
 
 class TestReadPath(unittest.TestCase):
     def setUp(self):
-        self.repo = _pipeline()
+        self.conn, self.repo = _pipeline()
+        self.addCleanup(self.conn.close)
 
     def test_superseded_fact_is_not_a_candidate(self):
         current_ids = {f.id for f in self.repo.current_facts()}

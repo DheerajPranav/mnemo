@@ -82,6 +82,8 @@
     <div class="gate"><span class="box"></span><span class="label"><b>G0 (M1, blocking):</b> the cross-tenant adversarial suite returns <b>0</b> foreign-tenant rows across all 11 D3 queries — <code>gate_g0_isolation.py</code> exits 0. Invariant I1. Closes F10.</span></div>
     <div class="gate"><span class="box"></span><span class="label"><b>G1 (M2):</b> an admit carrying a phone / medical token stores <b>nothing</b> for that candidate — PII exposures = <b>0</b> (baseline: 3) — <code>gate_g1_pii.py</code> exits 0. Invariant I2. Closes F11.</span></div>
     <div class="gate"><span class="box"></span><span class="label"><b>G2 (M3):</b> on the D3 fixed set, supersession-failure <b>&lt; 0.80</b> (baseline) AND cross-tenant leak = <b>0</b> (baseline: 7/11) — <code>gate_g2_baseline.py</code> exits 0. Invariants I3+I4. The design's core claim, proven or falsified.</span></div>
+    <div class="gate"><span class="box"></span><span class="label"><b>G3 (M4, high-risk):</b> (a) consolidation keeps every source retrievable and re-derivable; (b) delete-then-requery returns nothing, embedding cascades, <code>window_ms</code> recorded; (c) a wrongly-invalidated fact is recoverable from history — <code>gate_g3_lifecycle.py</code> exits 0. Invariants I7+I8. Closes F9/F5/F6.</span></div>
+    <div class="gate"><span class="box"></span><span class="label"><b>G4 (M5):</b> (a) an injected failure is localised by its trace; (b) the 3-arm report reproduces on the failure metrics; (c) zero planted instructions survive to an actionable injected memory, or the residual is quantified — <code>gate_g4_observability.py</code> exits 0. Invariant I9. Threat T4/R4.</span></div>
   </div>
 
   <!-- ───────────── IMPLEMENTATION PLAN ───────────── -->
@@ -93,7 +95,8 @@
         <tr><td>M1</td><td>Tenant isolation (S0) — constructor-scoped repository + store</td><td>Modular-architecture / data-systems</td><td><code>python3 implementation/gates/gate_g0_isolation.py</code></td><td>L1, L4</td><td><span class="pill ok">done</span></td></tr>
         <tr><td>M2</td><td>Write path (S1) — typed extraction + PII admission gate + provenance</td><td>LLMOps / security-engineering</td><td><code>python3 implementation/gates/gate_g1_pii.py</code></td><td>L1, L3, L4</td><td><span class="pill ok">done</span></td></tr>
         <tr><td>M3</td><td>Read path (S2) — validity-filtered multi-signal ranker, beat D3 baseline</td><td>Retrieval &amp; ranking / evaluation</td><td><code>python3 implementation/gates/gate_g2_baseline.py</code></td><td>L1, L2, L4</td><td><span class="pill ok">done</span></td></tr>
-        <tr><td>M4–M5</td><td>Lifecycle (S3, high-risk) · observability/eval/injection (S4)</td><td>—</td><td>deferred to D6 (gates G3–G4)</td><td>—</td><td><span class="pill">later</span></td></tr>
+        <tr><td>M4</td><td>Lifecycle (S3) — correction, deletion, expiry + consolidation <b>(high-risk)</b></td><td>Data-systems / security</td><td><code>python3 implementation/gates/gate_g3_lifecycle.py</code></td><td>L1, L2, L4</td><td><span class="pill ok">done</span></td></tr>
+        <tr><td>M5</td><td>Observability (S4) — traces, 3-arm eval, injection hardening</td><td>LLMOps / security / evaluation</td><td><code>python3 implementation/gates/gate_g4_observability.py</code></td><td>L1, L3, L4</td><td><span class="pill ok">done</span></td></tr>
       </tbody>
     </table>
     <p class="note">Total token budget = (n milestones × 50000). Update <span class="pill wip">wip</span> /

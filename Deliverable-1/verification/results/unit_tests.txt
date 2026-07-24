@@ -1,0 +1,64 @@
+test_later_fact_supersedes_earlier_on_write (test_admission.TestAdmission.test_later_fact_supersedes_earlier_on_write) ... ok
+test_out_of_order_admit_of_stale_fact_is_admitted_already_superseded (test_admission.TestAdmission.test_out_of_order_admit_of_stale_fact_is_admitted_already_superseded) ... ok
+test_pii_record_stores_nothing (test_admission.TestAdmission.test_pii_record_stores_nothing) ... ok
+test_constructor_requires_a_tenant (test_isolation.TestConstructorScopedIsolation.test_constructor_requires_a_tenant) ... ok
+test_current_facts_are_also_scoped (test_isolation.TestConstructorScopedIsolation.test_current_facts_are_also_scoped) ... ok
+test_no_public_method_accepts_a_tenant_parameter (test_isolation.TestConstructorScopedIsolation.test_no_public_method_accepts_a_tenant_parameter)
+Invariant I1, static form. If this fails, isolation has been weakened structurally. ... ok
+test_repo_never_returns_a_foreign_tenant_row (test_isolation.TestConstructorScopedIsolation.test_repo_never_returns_a_foreign_tenant_row) ... ok
+test_rollup_cites_and_never_replaces_its_sources (test_lifecycle.TestConsolidation.test_rollup_cites_and_never_replaces_its_sources) ... /Users/dheerajpranav/Desktop/DeskTrux/AI Sprint - Antern/week 5/mnemo/Deliverable-1/implementation/mnemo/repository.py:87: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107e397b0>
+  self._conn.execute(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/dheerajpranav/Desktop/DeskTrux/AI Sprint - Antern/week 5/mnemo/Deliverable-1/implementation/mnemo/repository.py:87: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107e39990>
+  self._conn.execute(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/dheerajpranav/Desktop/DeskTrux/AI Sprint - Antern/week 5/mnemo/Deliverable-1/implementation/mnemo/repository.py:87: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107e39b70>
+  self._conn.execute(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/dheerajpranav/Desktop/DeskTrux/AI Sprint - Antern/week 5/mnemo/Deliverable-1/implementation/mnemo/repository.py:87: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107e39d50>
+  self._conn.execute(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/dheerajpranav/Desktop/DeskTrux/AI Sprint - Antern/week 5/mnemo/Deliverable-1/implementation/mnemo/repository.py:87: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107e39c60>
+  self._conn.execute(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/dheerajpranav/Desktop/DeskTrux/AI Sprint - Antern/week 5/mnemo/Deliverable-1/implementation/mnemo/repository.py:87: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107e39e40>
+  self._conn.execute(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_rollup_uses_a_distinct_subject_so_it_cannot_supersede_sources (test_lifecycle.TestConsolidation.test_rollup_uses_a_distinct_subject_so_it_cannot_supersede_sources) ... ok
+test_incorrectly_invalidated_fact_is_recoverable (test_lifecycle.TestCorrectionRecovery.test_incorrectly_invalidated_fact_is_recoverable) ... ok
+test_delete_cannot_touch_another_tenant (test_lifecycle.TestDeletion.test_delete_cannot_touch_another_tenant) ... ok
+test_delete_removes_from_storage_and_retrieval_and_cascades (test_lifecycle.TestDeletion.test_delete_removes_from_storage_and_retrieval_and_cascades) ... ok
+test_deletion_window_is_recorded (test_lifecycle.TestDeletion.test_deletion_window_is_recorded) ... ok
+test_expires_old_events_but_not_facts (test_lifecycle.TestExpiry.test_expires_old_events_but_not_facts) ... ok
+test_event_memories_accumulate_and_are_not_superseded (test_lifecycle.TestSupersessionScope.test_event_memories_accumulate_and_are_not_superseded) ... ok
+test_only_genuine_conflicts_are_invalidated (test_lifecycle.TestSupersessionScope.test_only_genuine_conflicts_are_invalidated) ... ok
+test_slot_valued_facts_still_supersede (test_lifecycle.TestSupersessionScope.test_slot_valued_facts_still_supersede) ... ok
+test_exactly_the_flagged_memory_is_blocked (test_pii_gate.TestPiiOverFixedDataset.test_exactly_the_flagged_memory_is_blocked)
+Across the 44 D3 memories, the gate must block precisely the is_pii=True one (m009). ... ok
+test_blocks_email_ssn_health (test_pii_gate.TestPiiRecognizers.test_blocks_email_ssn_health) ... ok
+test_blocks_personal_phone (test_pii_gate.TestPiiRecognizers.test_blocks_personal_phone) ... ok
+test_does_not_block_ordinary_gtm_facts (test_pii_gate.TestPiiRecognizers.test_does_not_block_ordinary_gtm_facts) ... ok
+test_abstains_on_cold_start_no_relevant_memory (test_ranking.TestReadPath.test_abstains_on_cold_start_no_relevant_memory) ... ok
+test_answers_supersession_query_with_current_fact (test_ranking.TestReadPath.test_answers_supersession_query_with_current_fact) ... ok
+test_cross_account_fact_cannot_answer_account_scoped_query (test_ranking.TestReadPath.test_cross_account_fact_cannot_answer_account_scoped_query)
+q10: an Initech data-residency fact must not answer an Acme hosting-region question. ... ok
+test_no_pii_and_no_foreign_tenant_ever_injected (test_ranking.TestReadPath.test_no_pii_and_no_foreign_tenant_ever_injected) ... ok
+test_sso_tie_resolved_current_is_m006 (test_ranking.TestReadPath.test_sso_tie_resolved_current_is_m006)
+The M3 recovery: same recorded_at, later ingestion (m006) supersedes m005. ... ok
+test_superseded_fact_is_not_a_candidate (test_ranking.TestReadPath.test_superseded_fact_is_not_a_candidate) ... ok
+test_benign_control_is_not_over_blocked (test_red_team.TestInjectionGuard.test_benign_control_is_not_over_blocked) ... ok
+test_every_overt_planted_instruction_is_blocked_at_admission (test_red_team.TestInjectionGuard.test_every_overt_planted_instruction_is_blocked_at_admission) ... ok
+test_guard_does_not_fire_on_any_legitimate_dataset_memory (test_red_team.TestInjectionGuard.test_guard_does_not_fire_on_any_legitimate_dataset_memory) ... ok
+test_subtle_indirect_instructions_survive__documented_residual_R4 (test_red_team.TestInjectionGuard.test_subtle_indirect_instructions_survive__documented_residual_R4)
+Measured residual, deliberately asserted so it cannot change silently. ... ok
+test_every_retrieval_writes_exactly_one_audit_row (test_trace.TestTrace.test_every_retrieval_writes_exactly_one_audit_row) ... ok
+test_read_fails_closed_when_the_audit_write_fails (test_trace.TestTrace.test_read_fails_closed_when_the_audit_write_fails) ... ok
+test_trace_localises_a_memory_dropped_before_the_ranker (test_trace.TestTrace.test_trace_localises_a_memory_dropped_before_the_ranker) ... ok
+test_trace_records_abstention_with_a_reason (test_trace.TestTrace.test_trace_records_abstention_with_a_reason) ... ok
+test_trace_records_the_injected_set_and_is_retrievable_by_request_id (test_trace.TestTrace.test_trace_records_the_injected_set_and_is_retrievable_by_request_id) ... ok
+
+----------------------------------------------------------------------
+Ran 36 tests in 0.081s
+
+OK

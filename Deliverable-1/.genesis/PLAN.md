@@ -78,7 +78,23 @@ substrate is preserved as ADR-005 and re-instated in D6. Recorded as **decision 
 - **Skills:** canon + tdd + evaluation
 - **Token budget:** 50000
 
-<!-- M4 (S3 lifecycle, high-risk, gate G3) and M5 (S4 observability/eval/injection, gate G4) are deferred to Deliverable 6 per the D5↔D6 boundary. -->
+### M4 — Lifecycle (S3): correction, deletion, expiry + consolidation  ·  **HIGH-RISK**
+- **Outcome:** erasure is real and measured; the store stays healthy; a rollup **cites** its sources and never replaces them; a wrongly-invalidated fact is recoverable.
+- **Phase:** data-systems / security-engineering
+- **Files:** `implementation/mnemo/{lifecycle,consolidation}.py`, `implementation/tests/test_lifecycle.py`, `implementation/gates/gate_g3_lifecycle.py`
+- **Demo command:** `python3 implementation/gates/gate_g3_lifecycle.py`
+- **Success criteria:** Gate **G3** — (a) consolidation keeps every source retrievable and re-derivable (F5/F6, invariant I8); (b) delete-then-requery returns nothing, embedding cascades, `window_ms` recorded within the ADR-004 window (F9, invariant I7); (c) an incorrectly invalidated fact is recoverable from history (ADR-001 residual).
+- **Loops:** L1, L2, L4 · **Skills:** canon + tdd + data-systems-engineering
+- **Token budget:** 50000
+
+### M5 — Observability, 3-arm eval, injection hardening (S4)
+- **Outcome:** every memory decision is inspectable from a trace; every claim reproducible; planted instructions measured.
+- **Phase:** llmops / security-engineering / evaluation
+- **Files:** `implementation/mnemo/trace.py`, `implementation/eval/run_3arm.py`, `implementation/gates/gate_g4_observability.py`, `implementation/tests/test_trace.py`, `implementation/tests/test_red_team.py`
+- **Demo command:** `python3 implementation/gates/gate_g4_observability.py`
+- **Success criteria:** Gate **G4** — (a) an injected failure is localised by its trace (C9, invariant I9); (b) the 3-arm report (naive / +recency / validity-filter) reproduces on the failure metrics; (c) zero planted instructions survive to an actionable injected memory, **or the residual is quantified and documented** (threat T4/R4).
+- **Loops:** L1, L3, L4 · **Skills:** canon + tdd + security-engineering + llmops
+- **Token budget:** 50000
 
 ---
 
@@ -86,4 +102,6 @@ substrate is preserved as ADR-005 and re-instated in D6. Recorded as **decision 
 
 - **M1 — tenant isolation (S0) · DONE · 2026-07-24.** Gate G0 PASS (exit 0): cross-tenant leak **7/11 → 0/11**; F10-probed leak rate 0.500 → 0.000. Invariant I1 verified two ways (static: no method signature carries a tenant; adversarial L4: 9/9 attacks blocked). Files: `mnemo/{store,repository}.py`, `tests/test_isolation.py`, `gates/{_dataset,gate_g0_isolation}.py`. Checkpoint: `checkpoints/M1.md`.
 - **M2 — write path + PII gate (S1) · DONE · 2026-07-24.** Gate G1 PASS (exit 0): PII exposures **3 → 0**; exactly 1 record blocked (m009), zero over-blocks across all 44. Invariant I2 verified (blocked leaves no row/embedding/log; L4 3/3 attacks handled) + honest residual logged (spelled-out numbers → D6 Presidio ML). Files: `mnemo/{pii_gate,extraction,admission}.py`, `tests/{test_pii_gate,test_admission}.py`, `gates/gate_g1_pii.py`. Checkpoint: `checkpoints/M2.md`.
+- **M5 — observability, 3-arm eval, injection (S4) · DONE · 2026-07-25.** Gate G4 PASS (exit 0): (a) trace localises an injected failure to `not_a_candidate` (the validity filter, not the ranker) + audit **fails closed** (R5); (b) 3-arm report reproduces byte-identically — **recency alone left supersession unchanged at 0.80 and made cross-tenant leak WORSE (7→10)**, arm 3 closes all structural failures; (c) **8/8 overt** planted instructions blocked, benign control admitted, **3 subtle indirect-authority statements survive (rt09 verified reaching an injected context) — R4 residual quantified, not closed**. L4 5/5. Files: `mnemo/{trace,injection_guard}.py`, `eval/{run_3arm.py,red_team_cases.jsonl}`, `tests/{test_trace,test_red_team}.py`, `gates/gate_g4_observability.py`. Checkpoint: `M5.md`.
+- **M4 — lifecycle (S3) · DONE · 2026-07-25 · HIGH-RISK.** Gate G3 PASS (exit 0): (a) consolidation cites **12/12** sources, all retrievable + re-derivable, purely additive; (b) delete-then-requery returns nothing, embeddings cascade to 0, `window_ms`≈0.11 recorded (≪ ADR-004 24h); (c) wrongly-invalidated fact recoverable from history. **Found + fixed a latent write-path defect:** supersession was firing on `event` memories (thread/chatter defaulted to `fact`), silently invalidating **31 of 40** memories — meaning D5's G2 had passed partly for the wrong reason. After the fix (`SUPERSEDING_TYPES = {fact, preference}`), state is 30 current / 10 invalidated and **G2 still passes 11/11 with the full noise restored — a stronger result**. L4 4/4 (verified via raw SQL). Files: `mnemo/{lifecycle,consolidation}.py`, +3 store tables, `tests/test_lifecycle.py`, `gates/gate_g3_lifecycle.py`. Checkpoints: `M4-pre-highrisk.md`, `M4.md`.
 - **M3 — read path, beat the baseline (S2) · DONE · 2026-07-24 · HIGH-RISK.** Gate G2 PASS (exit 0): **overall accuracy 0/11 → 11/11**, recall@k 0.333 → 1.0, supersession 0.80 → 0.0, inversion 1 → 0, leak 7 → 0, PII 3 → 0, cold-start 1.0 → 0.0. **Documented recovery (§7.3):** first G2 run failed on the predicted SSO same-`recorded_at` tie (F7) *and* an unpredicted cold-start abstain miss; root-caused via L2 DEBUG into 5 principled revisions (R1 seq-tiebreak, R2 stopwords+subject-slot, R3 account-name strip, R4 single-char drop, R5 same-account abstain); pre-change restore point `M3-pre-highrisk.md` held G0/G1 green throughout. L4 4/4 adversarial attacks blocked. Files: `mnemo/{retrieval,ranking,injection}.py`, `tests/test_ranking.py`, `gates/gate_g2_baseline.py`, `eval/run_comparison.py`. Checkpoints: `M3-pre-highrisk.md`, `M3.md`.

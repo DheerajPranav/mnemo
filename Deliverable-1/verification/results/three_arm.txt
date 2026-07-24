@@ -1,0 +1,10 @@
+wrote /Users/dheerajpranav/Desktop/DeskTrux/AI Sprint - Antern/week 5/mnemo/Deliverable-1/implementation/eval/three_arm.md
+
+metric                                    naive   +recency   validity
+overall_accuracy                            0.0        0.0        1.0
+recall_at_k                               0.333      0.333      0.778
+supersession_failure_rate                   0.8        0.8        0.0
+inversion_failures                            1          1          0
+cross_tenant_leak_queries                     7         10          0
+pii_exposure_count                            3          3          0
+coldstart_abstention_failure_rate           1.0        1.0        0.0

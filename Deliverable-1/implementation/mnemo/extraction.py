@@ -11,6 +11,10 @@ Typing untrusted conversation text into constrained fields is also the first lin
 (memory-borne prompt injection): a fact is a (subject, value) slot, not free instructions.
 """
 
+# Slot-valued subjects hold ONE current value, so a newer entry replaces the older (supersession).
+# Event-like subjects ACCUMULATE — a call note or thread turn does not contradict the previous one.
+# Getting this wrong is F5 (loss): D6/M4 found the write path silently invalidating 31 of 40 memories
+# because thread/chatter defaulted to `fact` and therefore superseded each other.
 _TYPE_BY_SUBJECT = {
     "crm": "fact",
     "dm": "fact",
@@ -18,7 +22,12 @@ _TYPE_BY_SUBJECT = {
     "residency": "fact",
     "sso": "preference",
     "call_notes": "event",
+    "thread": "event",
+    "chatter": "event",
 }
+
+# Only these types participate in supersession (see admission.admit).
+SUPERSEDING_TYPES = frozenset({"fact", "preference"})
 
 
 def extract(record):

@@ -49,20 +49,39 @@ to a measured failure baseline, to a complete implementable system spec.
 | **D3** | Productive Failure Baseline | `Deliverable-1/experiments/` | ✅ |
 | **D4** | First-Principles System Design | `Deliverable-1/design/` | ✅ |
 | **D5** | Genesis Engineering Workflow | `Deliverable-1/.genesis/` + `implementation/` | ✅ |
-| D6–D8 | Implementation+Verification · Journal · Transfer | — | ⏳ |
+| **D6** | Implementation + Independent Verification | `Deliverable-1/implementation/` + `verification/` | ✅ |
+| D7–D8 | Journal + Retrospective · Knowledge Transfer | — | ⏳ |
 
 **Headline measured result (D3):** the naive single-signal baseline passes **0 / 11** adversarial
 queries — supersession failure **0.80**, cross-tenant leak on **7/11**, **3** PII exposures — while
 being fast (p95 ≈ 0.05 ms) and far under budget. The failures are **structural**, not a
 retrieval-tuning problem, which is exactly what the D4 architecture is designed to fix.
 
-**Headline built result (D5):** the designed system — built across three bounded, gated Genesis loops —
+**Headline built result (D5–D6):** the designed system — built across five bounded, gated Genesis loops —
 passes **11 / 11** on the *same* fixed set: supersession **0.80 → 0**, cross-tenant leak **7/11 → 0**,
 PII exposures **3 → 0**, cold-start abstention **1.0 → 0**. Every gate is a runnable script
 (`implementation/gates/*.py`); isolation is a *constructor-scoped invariant* (no method can express a
 cross-tenant read), conflict resolution lives on the write path, and injection abstains rather than
-guesses. Reproduce with no install / no network:
-`python3 -m unittest discover -s Deliverable-1/implementation/tests` + the three gate scripts.
+guesses.
+
+**Independent verification (D6): PASS** — 8/8 executable handbook §8.3 acceptance checks over 38
+evaluation cases, 36/36 tests, gates G0–G4 all green. Verification is re-derived *from the spec*
+(`verification/verify.py` never reads the gates' own verdicts). A **3-arm comparison** falsifies the
+cheap fix: adding a recency signal leaves supersession unchanged **and makes cross-tenant leakage
+worse (7 → 10)** — these failures are structural, not ranking problems.
+
+**Reported, not hidden.** Verification found that the write-path supersession rule had been silently
+invalidating **31 of 40** memories (conversation turns were superseding each other), which meant an
+earlier gate had been passing partly for the wrong reason; it is fixed, re-verified, and written up in
+`verification/final_verification.pdf §4`. Four residual risks are carried with measured numbers —
+including **R4**, where 3 subtle prompt injections survive admission and one was verified reaching an
+injected context, and **R-P1**, where Postgres RLS ships as reviewable SQL but is marked **UNVERIFIED**
+because no Postgres service was available to execute it.
+
+Reproduce everything with no install / no network / no services:
+```bash
+cd Deliverable-1 && bash verification/run_all.sh
+```
 
 ## Repository layout
 
@@ -73,7 +92,10 @@ Deliverable-1/          the project (all sub-deliverables in subfolders)
 ├── experiments/        D3 — the naive baseline, dataset, measured results, failure report
 ├── design/             D4 — system design, architecture, data model, API, threat model, sprint plan
 ├── .genesis/           D5 — the Genesis spine (plan, definition-of-done, gates, checkpoints, decisions)
-├── implementation/     D5→D6 — mnemo source (store, repository, admission, ranking), tests, runnable gates
+├── implementation/     D5→D6 — mnemo source (store, repository, admission, ranking, lifecycle, trace),
+│                       36 tests, 5 runnable gates, 3-arm eval, Postgres+RLS schema
+├── verification/       D6 — test plan, 38-case evaluation dataset, captured results, security report,
+│                       final_verification.pdf  (run: bash verification/run_all.sh)
 ├── journal/            dated work-session notes
 └── PROGRESS.md         running build log
 _build/                 HTML → PDF render pipeline (headless Chrome + shared print CSS)

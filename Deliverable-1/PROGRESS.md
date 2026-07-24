@@ -6,7 +6,7 @@ One section per work day. Newest day at the top of the day list.
 - **Repo:** `Deliverable-1/` (the whole project; 8 handbook sub-deliverables live in its subfolders)
 - **Handbook:** `../deliverable_1.pdf` (v1.0, June 2026)
 - **Author:** Dheeraj Pranav
-- **This run's scope:** Day 1 = verify/polish Deliverable 1 · Day 2 = Deliverable 2 (Research-to-Design Scan) · Day 3 = Deliverable 3 (Productive Failure Baseline) · Day 4 = Deliverable 4 (System Design) · Day 5 = Deliverable 5 (Genesis Engineering Workflow)
+- **This run's scope:** Day 1 = verify/polish Deliverable 1 · Day 2 = Deliverable 2 (Research-to-Design Scan) · Day 3 = Deliverable 3 (Productive Failure Baseline) · Day 4 = Deliverable 4 (System Design) · Day 5 = Deliverable 5 (Genesis Engineering Workflow) · Day 6 = Deliverable 6 (Implementation + Independent Verification)
 
 > Convention: this log records *what was done, decisions made, commands run, and blockers*.
 > It is deliberately terse. The narrative reasoning for each session lives in `journal/YYYY-MM-DD.md`.
@@ -247,3 +247,50 @@ abstain threshold, so the system correctly declines rather than guesses.
 
 **Feeds D6:** M4 lifecycle (deletion/consolidation, gate G3, high-risk) + M5 observability/eval + R4
 prompt-injection red-team (gate G4) + the Postgres migration behind the same `TenantRepository`.
+
+---
+
+## Day 6 — 2026-07-25 — Deliverable 6: Implementation and Independent Verification
+
+**Status:** ✅ **DONE.** Two more build loops (M4, M5) completing the §8.2 minimum scope, plus an
+independent verification suite. **Verdict: PASS** — 8/8 executable §8.3 checks over 38 evaluation
+cases, 1 item reported UNVERIFIED, 4 residual risks carried with measured numbers.
+
+**Artifacts produced (all §8.2 required):**
+- `implementation/` — runnable source: `mnemo/{lifecycle,consolidation,trace,injection_guard}.py` added to the D5 modules; `mnemo/postgres_schema.sql` (production substrate + RLS, **not executed here**)
+- `implementation/README.md` — setup, architecture summary, commands
+- `verification/test_plan.md` — test levels + the §8.3 check→evidence matrix
+- `verification/evaluation_dataset.jsonl` — 38 cases (11 retrieval · 8 PII pos/neg · 12 injection · 7 lifecycle/budget)
+- `verification/results/` — captured outputs (tests, gates G0–G4, comparison, 3-arm, verification)
+- `verification/security_report.md` — isolation · PII · deletion · red-team · residual register
+- `verification/final_verification.pdf` — the verdict report (source `_src/final_verification.html`)
+- also: `verify.py`, `run_all.sh`, `build_evaluation_dataset.py`; decision `D6-DR-002`
+
+**Gates (computed, not narrated):**
+| Gate | Result |
+| :-- | :-- |
+| G3 (M4, high-risk) | (a) consolidation cites 12/12 sources, all retrievable + re-derivable; (b) delete→requery returns nothing, raw SQL shows 0 rows in `memory` **and** `memory_embedding`, `window_ms`≈0.11 ≪ ADR-004 24h; (c) wrongly-invalidated fact recoverable |
+| G4 (M5) | (a) trace localises an injected failure to `not_a_candidate` + audit **fails closed**; (b) 3-arm report reproduces byte-identically; (c) 8/8 overt injections blocked, benign admitted, 3 subtle survivors quantified |
+
+**Commands run:**
+```bash
+bash verification/run_all.sh      # 36/36 tests · gates G0–G4 exit 0 · §8.3 verification PASS
+```
+
+**Productive failure (the important one):** G3 passed first run but reported "1 source" for a 12-turn
+thread. Investigation found the write-path supersession rule firing on *event* memories (thread/chatter
+defaulted to `fact`), **silently invalidating 31 of 40 memories** — F5 committed by the write path.
+Consequence: **D5's G2 had been passing partly for the wrong reason** (11/11 against only 9 surviving
+facts). Fixed (`SUPERSEDING_TYPES = {fact, preference}`); corpus restored to 30 current facts and
+**G2 still passes 11/11 — now earned**. `recall_at_k` 1.0 → 0.778 is the honest cost, reported.
+
+**Second correction:** I pre-wrote the 3-arm narrative predicting recency would improve supersession.
+It didn't (0.80 → 0.80) and it made cross-tenant leakage **worse** (7 → 10), because foreign-tenant
+near-duplicates are newer. Narrative rewritten to match the measurement — this reproduces D3's
+prediction that a stronger ranking signal makes F10 worse.
+
+**Residuals carried (reported, not hidden):** R4 (3 subtle prompt injections survive; `rt09` verified
+reaching context) · R-P1 (Postgres RLS **UNVERIFIED** — no service available, D6-DR-002) · R-P2
+(spelled-out identifiers evade the PII floor) · R-P3 (subject-abbreviation queries abstain; fails safe).
+
+**Feeds:** D7 (journal + retrospective) and D8 (knowledge transfer).

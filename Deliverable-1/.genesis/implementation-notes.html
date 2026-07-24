@@ -33,14 +33,15 @@
   <p class="sub"><b>Rolling source of truth for what is LIVE right now.</b> The wiki can lag; this file
      cannot. Read this on every session start to avoid rebuilding what exists. This is your
      <i>git-like restart point</i>: if context is lost, this file rehydrates you.
-     Last updated: <code>2026-07-24 (D5 complete — M1/M2/M3 done)</code> · by loop: <code>M3 exit</code></p>
+     Last updated: <code>2026-07-25 (D6 complete — M1–M5 done, verification PASS)</code> · by loop: <code>M5 exit + verification</code></p>
 
   <!-- ───────────── ONE-LINE STATUS ───────────── -->
   <div class="card live">
-    <b>Now in flight:</b> nothing — Deliverable 5 complete. Three build loops shipped and gated;
-       mnemo beats the D3 baseline 0/11 → 11/11 on the fixed set.<br>
-    <b>Active loop:</b> — · <b>Current milestone:</b> M1–M3 all DONE · <b>Phase:</b> hand-off to D6<br>
-    <b>Blocked on:</b> nothing. Next: D6 (Postgres+pgvector+RLS re-instatement; M4 lifecycle; M5 observability/eval).
+    <b>Now in flight:</b> nothing — Deliverable 6 complete. Five build loops shipped and gated;
+       independent §8.3 verification PASS (8/8 checks, 38 cases, 1 item reported UNVERIFIED).<br>
+    <b>Active loop:</b> — · <b>Current milestone:</b> M1–M5 all DONE · <b>Phase:</b> hand-off to D7<br>
+    <b>Blocked on:</b> nothing. Next: D7 (journal + retrospective), D8 (knowledge transfer). Open residuals:
+       R4 subtle injections · R-P1 Postgres RLS unverified · R-P2 PII evasion · R-P3 subject normalization.
   </div>
 
   <!-- ───────────── WHAT'S LIVE ───────────── -->
@@ -55,16 +56,23 @@
         <tr><td>M1 tenant isolation (constructor-scoped repo, I1)</td><td><code>mnemo/repository.py</code></td><td><span class="pill live">live</span></td><td>gate G0 (leak 0/11) + L4 9/9</td></tr>
         <tr><td>M2 write path: PII gate (I2), typed extraction, supersession-on-write (I3)</td><td><code>mnemo/{pii_gate,extraction,admission}.py</code></td><td><span class="pill live">live</span></td><td>gate G1 (pii 0) + L4 3/3</td></tr>
         <tr><td>M3 read path: validity-filtered ranker + abstaining injection (I4)</td><td><code>mnemo/{retrieval,ranking,injection}.py</code></td><td><span class="pill live">live</span></td><td>gate G2 (11/11) + L4 4/4</td></tr>
-        <tr><td>Baseline comparison artifact</td><td><code>implementation/eval/comparison.md</code></td><td><span class="pill live">live</span></td><td>run_comparison.py</td></tr>
+        <tr><td>M4 lifecycle: delete (cascade + measured window), correct/restore, expiry (I7)</td><td><code>mnemo/lifecycle.py</code></td><td><span class="pill live">live</span></td><td>gate G3 + L4 4/4 (raw SQL)</td></tr>
+        <tr><td>M4 consolidation: rollup cites sources, never replaces (I8)</td><td><code>mnemo/consolidation.py</code></td><td><span class="pill live">live</span></td><td>gate G3(a) 12/12 sources</td></tr>
+        <tr><td>M5 decision traces + fail-closed audit (C9, I9)</td><td><code>mnemo/trace.py</code></td><td><span class="pill live">live</span></td><td>gate G4(a) + L4 5/5</td></tr>
+        <tr><td>M5 prompt-injection guard (T4/R4)</td><td><code>mnemo/injection_guard.py</code></td><td><span class="pill live">live</span></td><td>gate G4(c) 8/8 overt blocked</td></tr>
+        <tr><td>Production substrate + RLS (NOT executed here)</td><td><code>mnemo/postgres_schema.sql</code></td><td><span class="pill wip">deploy-ready</span></td><td>R-P1 UNVERIFIED</td></tr>
+        <tr><td>Baseline comparison + 3-arm evaluation</td><td><code>implementation/eval/{comparison,three_arm}.md</code></td><td><span class="pill live">live</span></td><td>run_comparison.py / run_3arm.py</td></tr>
+        <tr><td>Independent §8.3 verification suite</td><td><code>verification/</code></td><td><span class="pill live">live</span></td><td>verify.py — PASS 8/8</td></tr>
       </tbody>
     </table>
-    <p class="note">17/17 unit tests green; gates G0/G1/G2 all exit 0. Append a row the moment a milestone passes L4 VERIFY.</p>
+    <p class="note">36/36 unit + integration tests green; gates G0–G4 all exit 0; independent §8.3 verification PASS over 38 cases. Append a row the moment a milestone passes L4 VERIFY.</p>
   </div>
 
   <!-- ───────────── DECISIONS THAT BIND ───────────── -->
   <h2>Decisions that constrain new work</h2>
   <div class="card">
     <ul>
+      <li><code>D6-DR-002</code> — Postgres+pgvector+RLS ships as a deploy-ready, reviewable SQL artifact; sqlite stays the runnable/verified substrate. RLS is carried as UNVERIFIED (R-P1), never claimed → <code>decisions/D6-DR-002-postgres-rls-as-deploy-artifact.md</code></li>
       <li><code>D5-DR-001</code> — implementation substrate = pure-stdlib + <code>sqlite3</code> for the loops; Postgres+pgvector+RLS remains the production target (ADR-005), re-instated in D6 → <code>decisions/D5-DR-001-stdlib-sqlite-substrate.md</code></li>
       <li><code>ADR-005</code> — single Postgres+pgvector store; index is a derived projection; deletion cascades in one txn → <code>../design/decision_records/ADR-005-postgres-pgvector-single-store.md</code></li>
       <li><code>ADR-001</code> — bi-temporal validity; conflict resolution on the WRITE path, ranker orders only valid facts → <code>../design/decision_records/ADR-001/</code></li>
@@ -81,6 +89,8 @@
     <table>
       <thead><tr><th>Date</th><th>Milestone</th><th>Planned approach</th><th>Actual approach</th><th>Reason</th><th>Invariant impact</th></tr></thead>
       <tbody>
+        <tr><td>2026-07-25</td><td>M4</td><td>supersession on any (account, subject) collision</td><td>supersession only for <code>fact</code>/<code>preference</code>; events accumulate</td><td>thread/chatter defaulted to <code>fact</code> and superseded each other — 31 of 40 memories silently invalidated (F5)</td><td>I3 corrected; G2 re-verified 11/11 with the full noise restored (stronger)</td></tr>
+        <tr><td>2026-07-25</td><td>D6</td><td>run the loops on Postgres+pgvector+RLS</td><td>ship it as reviewable SQL; keep sqlite as the runnable substrate</td><td>no Postgres service available (D6-DR-002)</td><td>R-P1 carried as UNVERIFIED, not assumed</td></tr>
         <tr><td>2026-07-24</td><td>(project)</td><td>Postgres+pgvector+RLS substrate (ADR-005)</td><td>stdlib + sqlite3 substrate for loops (D5-DR-001)</td><td>services/pip blocked in loop env (PEP-668, same as D3); isolation invariant is language-level, provable on sqlite</td><td>I1–I4 provable as-is; I5 deletion-cascade provable via sqlite <code>ON DELETE CASCADE</code>; RLS defence-in-depth deferred to D6</td></tr>
       </tbody>
     </table>
@@ -102,6 +112,13 @@
   <!-- ───────────── SESSION LOG (append-only) ───────────── -->
   <h2>Session log (append-only, newest first)</h2>
   <div class="card">
+    <p><code>2026-07-25</code> — D6 complete. Two more loops (M4 lifecycle, M5 observability/eval/red-team)
+       plus an independent §8.3 verification suite. M4 uncovered a latent write-path defect — supersession
+       was firing on event memories, silently invalidating 31 of 40 records, which meant D5's read-path gate
+       had been passing partly for the wrong reason; fixed and re-verified (G2 still 11/11, now against the
+       full corpus). M5's 3-arm eval falsified the "just add recency" fix: supersession unchanged, and
+       cross-tenant leakage got WORSE (7→10). Verification verdict PASS (8/8 checks, 38 cases); Postgres RLS
+       reported UNVERIFIED; R4 injection residual quantified (3 survive, 1 reaches context). 36/36 tests.</p>
     <p><code>2026-07-24 (later)</code> — D5 complete. Ran three bounded BUILD loops end-to-end with computed
        gates and independent L4 verification: M1 isolation (leak 7/11→0/11), M2 write-path+PII (exposures 3→0),
        M3 read-path (accuracy 0/11→11/11). M3 was the high-risk loop: pre-change checkpoint taken, first G2 run

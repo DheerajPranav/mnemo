@@ -1,0 +1,10 @@
+wrote /Users/dheerajpranav/Desktop/DeskTrux/AI Sprint - Antern/week 5/mnemo/Deliverable-1/verification/evaluation_dataset.jsonl  (38 cases)
+  budget             2
+  consolidation      1
+  correction         1
+  deletion           1
+  deletion_window    1
+  expiry             1
+  pii                8
+  prompt_injection   12
+  retrieval          11

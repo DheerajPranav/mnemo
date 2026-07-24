@@ -1,0 +1,140 @@
+<meta charset="utf-8">
+<title>Final Verification — Conversational Memory Intelligence System</title>
+<link rel="stylesheet" href="../../_build/print.css">
+
+<div class="title-block">
+  <p class="eyebrow">Learning Through Reconstruction &middot; Deliverable 6</p>
+  <h1>Final Verification</h1>
+  <p class="subtitle">Independent verification of the implemented system against the handbook &sect;8.3 acceptance checks, the Deliverable&nbsp;4 specification, and the measured Deliverable&nbsp;3 baseline.</p>
+  <div class="meta-grid">
+    <div><b>System</b> Mnemo &mdash; Conversational Memory Intelligence System</div>
+    <div><b>Author</b> Dheeraj Pranav</div>
+    <div><b>Verdict</b> PASS &mdash; 8/8 executable checks, 1 reported UNVERIFIED</div>
+    <div><b>Date</b> 25 July 2026</div>
+    <div><b>Evidence</b> verification/results/ &middot; test_plan.md &middot; security_report.md</div>
+    <div><b>Substrate</b> pure-stdlib + sqlite3 (D5-DR-001, D6-DR-002)</div>
+  </div>
+</div>
+
+<div class="callout">
+  <span class="label">Verification stance</span>
+  <p>Verification was performed <b>from the specification</b>, not by accepting the implementation's
+  own assessment. <code>verification/verify.py</code> re-derives every &sect;8.3 acceptance check
+  independently and never reads the gate scripts' verdicts. Every claim below is backed by a command
+  whose exit code is reproducible, or it is listed as <b>UNVERIFIED</b>. There is no third category.
+  Known failures and residual risks are reported rather than hidden.</p>
+</div>
+
+<h2>1. Headline result</h2>
+
+<p>The implemented system passes <b>11 of 11</b> adversarial queries on the fixed evaluation set that
+the naive baseline passed <b>0 of 11</b> &mdash; and it does so by changing <i>what is allowed to be a
+candidate</i>, not by re-weighting a ranker.</p>
+
+<table>
+  <thead><tr><th>Metric (same fixed set, k=5, budget=2000)</th><th>Naive baseline (D3)</th><th>Mnemo (D6)</th></tr></thead>
+  <tbody>
+    <tr><td>overall_accuracy</td><td>0.000 (0/11)</td><td><b>1.000 (11/11)</b></td></tr>
+    <tr><td>recall_at_k</td><td>0.333</td><td><b>0.778</b></td></tr>
+    <tr><td>supersession_failure_rate (F4)</td><td>0.800</td><td><b>0.000</b></td></tr>
+    <tr><td>inversion_failures (F7)</td><td>1</td><td><b>0</b></td></tr>
+    <tr><td>cross_tenant_leak_queries (F10)</td><td>7 of 11</td><td><b>0</b></td></tr>
+    <tr><td>pii_exposure_count (F11)</td><td>3</td><td><b>0</b></td></tr>
+    <tr><td>coldstart_abstention_failure_rate</td><td>1.000</td><td><b>0.000</b></td></tr>
+  </tbody>
+</table>
+
+<h2>2. &sect;8.3 acceptance checks &mdash; verdicts</h2>
+
+<table>
+  <thead><tr><th>#</th><th>Check</th><th>Independent evidence</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Relevant memories outrank plausible distractors</td><td>No distractor precedes its gold on any of the 11 queries. Stronger outcome: distractors are removed upstream (validity / isolation / PII), so they cannot rank at all.</td><td><b>PASS</b></td></tr>
+    <tr><td>2</td><td>Stale or superseded preferences do not override current</td><td>m001/m003/m005/m007 are not current; the current fact is the one injected for q01/q03/q04; a wrongly-invalidated fact is recoverable from history.</td><td><b>PASS</b></td></tr>
+    <tr><td>3</td><td>No cross-tenant memory under adversarial queries</td><td>0 foreign rows across all queries <i>and</i> exact-text adversarial queries for m101/m102; static check confirms no repository method accepts a tenant parameter.</td><td><b>PASS</b></td></tr>
+    <tr><td>4</td><td>Deletion removes from source storage and retrieval within the window</td><td>Delete&rarr;requery returns nothing; raw SQL shows 0 rows in <code>memory</code> <i>and</i> <code>memory_embedding</code>; <code>window_ms</code> &asymp; 0.11&nbsp;ms vs the ADR-004 24&nbsp;h backstop.</td><td><b>PASS</b></td></tr>
+    <tr><td>5</td><td>Context selection respects the token budget</td><td>Budgets 40 / 120 / 2000 all honoured; measured injected tokens &le; budget in each case.</td><td><b>PASS</b></td></tr>
+    <tr><td>6</td><td>Sensitive-data policy: positive <i>and</i> negative cases</td><td>4/4 positive blocked with no raw span retained; 4/4 negative admitted; across all 44 memories the gate blocks exactly the one flagged memory.</td><td><b>PASS</b></td></tr>
+    <tr><td>7</td><td>Benchmark compared with the naive baseline</td><td>Table in &sect;1 plus the 3-arm comparison below.</td><td><b>PASS</b></td></tr>
+    <tr><td>+</td><td>Memory-borne prompt injection (T4/R4, project-specific)</td><td>8/8 overt injections blocked, benign control admitted, 3 subtle survivors <b>quantified</b>.</td><td><b>PASS</b><br><span class="note">with documented residual</span></td></tr>
+  </tbody>
+</table>
+
+<h2>3. The 3-arm comparison &mdash; what actually fixes the failures</h2>
+
+<p>Arm&nbsp;2 exists to falsify the cheap fix (&ldquo;just prefer newer memories&rdquo;). It does not
+survive contact with the data.</p>
+
+<table>
+  <thead><tr><th>Metric</th><th>1 &middot; naive</th><th>2 &middot; +recency</th><th>3 &middot; validity-filter</th></tr></thead>
+  <tbody>
+    <tr><td>overall_accuracy</td><td>0.0</td><td>0.0</td><td><b>1.0</b></td></tr>
+    <tr><td>supersession_failure_rate</td><td>0.8</td><td>0.8 <span class="note">(unchanged)</span></td><td><b>0.0</b></td></tr>
+    <tr><td>cross_tenant_leak_queries</td><td>7</td><td>10 <span class="note">(worse)</span></td><td><b>0</b></td></tr>
+    <tr><td>pii_exposure_count</td><td>3</td><td>3</td><td><b>0</b></td></tr>
+    <tr><td>coldstart_abstention_failure_rate</td><td>1.0</td><td>1.0</td><td><b>0.0</b></td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <span class="label">Two findings I expected to go the other way</span>
+  <p><b>Recency did not move supersession at all</b> (0.80 &rarr; 0.80). The <i>superseded</i> memory is
+  the one that lexically matches the query &mdash; &ldquo;CRM platform&rdquo; appears in the stale
+  Salesforce chunk, while the current fact says &ldquo;migrated to HubSpot&rdquo; &mdash; so a recency
+  bonus competes with relevance instead of overriding it. <b>Recency made cross-tenant leakage worse</b>
+  (7 &rarr; 10 of 11 queries), because the foreign-tenant near-duplicates are <i>newer</i> than the
+  tenant's own facts. This reproduces the Deliverable&nbsp;3 prediction &mdash; a stronger ranking
+  signal makes F10 worse, not better &mdash; as a measurement rather than an assertion. Together these
+  settle first-principles falsifiers 1&ndash;2: supersession is not a recency-ranking problem, and the
+  isolation / PII / cold-start failures are structural.</p>
+</div>
+
+<h2>4. A defect this verification found in earlier work</h2>
+
+<p>Reporting this because it changes how an earlier claim should be read. While building the
+consolidation path (M4), gate&nbsp;G3 passed but reported an implausible number: a 12-turn conversation
+thread had only <b>1</b> source to consolidate. Investigation showed the write-path supersession rule
+was firing on <i>every</i> <code>(account, subject)</code> collision, and conversation turns had
+defaulted to the <code>fact</code> type &mdash; so they superseded one another. <b>31 of 40 admitted
+memories were being silently invalidated.</b> That is F5 (loss) committed by the write path.</p>
+
+<p>The consequence for Deliverable&nbsp;5: its read-path gate had been passing against a corpus of only
+9 surviving facts, i.e. the filler noise the ranker was supposed to prove it could handle had already
+been deleted by the defect. <b>The gate was passing partly for the wrong reason.</b> After scoping
+supersession to slot-valued types only (<code>fact</code>, <code>preference</code>; events accumulate),
+the corpus is 30 current facts and <b>the read-path gate still passes 11/11</b> &mdash; a materially
+stronger result than before, now for the right reason. <code>recall_at_k</code> fell from 1.0 to 0.778,
+which is the honest cost of restoring the noise.</p>
+
+<h2>5. Residual risks &mdash; carried, not closed</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Risk</th><th>Status</th><th>Measure</th><th>Next step</th></tr></thead>
+  <tbody>
+    <tr><td><b>R4</b></td><td>Subtle indirect-authority injections survive admission; one reaches an injected context</td><td>OPEN</td><td>3/3 subtle survive; <code>rt09</code> verified reachable</td><td>Provenance-weighted trust; render memories as quoted third-party data</td></tr>
+    <tr><td><b>R-P1</b></td><td>Postgres RLS defence-in-depth not executed</td><td>UNVERIFIED</td><td>&mdash;</td><td>Run <code>postgres_schema.sql</code> on a real Postgres; exact command in test_plan.md &sect;4</td></tr>
+    <tr><td><b>R-P2</b></td><td>Spelled-out identifiers evade the deterministic PII floor</td><td>OPEN</td><td>evasion reproduced</td><td>Presidio ML layer behind the floor (ADR-003)</td></tr>
+    <tr><td><b>R-P3</b></td><td>Subject-abbreviation queries (<code>dm</code>) abstain instead of answering</td><td>OPEN (fails safe)</td><td>recall_at_k 0.778</td><td>Subject/query normalization</td></tr>
+    <tr><td><b>R6</b></td><td>Op-selector cost unproven</td><td>DEFERRED</td><td>not built in v1</td><td>Remains a prototype per D4</td></tr>
+  </tbody>
+</table>
+
+<h2>6. Reproducing this verification</h2>
+
+<pre><code>cd Deliverable-1
+bash verification/run_all.sh        # captures every artifact under verification/results/
+</code></pre>
+
+<p>Python&nbsp;3.8+ standard library only &mdash; no install, no network, no services. Fixed dataset
+(<code>SEED=20260722</code>), fixed k=5 and budget=2000, no randomness at evaluation time; the 3-arm
+failure metrics are asserted byte-identical across two runs. Only wall-clock figures
+(<code>window_ms</code>, latency) vary between runs.</p>
+
+<div class="callout">
+  <span class="label">Verdict</span>
+  <p><b>PASS.</b> All 8 executable acceptance checks pass across 38 evaluation cases, with 36 unit and
+  integration tests green and gates G0&ndash;G4 all exiting 0. One item (Postgres RLS) is reported
+  <b>UNVERIFIED</b> rather than assumed, and four residual risks are carried with measured numbers and
+  named next steps. The repository can be set up and tested from its documentation, and every critical
+  claim is backed by reproducible evidence.</p>
+</div>

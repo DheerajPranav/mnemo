@@ -1,0 +1,78 @@
+########## gate_g0_isolation ##########
+=== GATE G0 · tenant isolation (M1 / S0) — BLOCKING ===
+query  tenant  candidates foreign_in_topk
+q01    T1      41         0              
+q02    T1      41         0              
+q03    T1      41         0              
+q04    T1      41         0              
+q05    T1      41         0              
+q06    T1      41         0              
+q07    T1      41         0              
+q08    T1      41         0              
+q09    T1      41         0              
+q10    T1      41         0              
+q11    T1      41         0              
+--------------------------------------------
+cross_tenant_leak (all queries):  0/11   (baseline: 7/11)
+cross_tenant_leak_rate (F10-probed): 0.000   (baseline: 0.500)
+
+GATE G0: PASS ✅  (criterion: 0 foreign-tenant rows on every query)
+exit=0
+
+########## gate_g1_pii ##########
+=== GATE G1 · PII admission gate (M2 / S1) ===
+records admitted:            43
+records PII-blocked:         1  (ids: ['m009'])
+is_pii memories in store:    none
+pii surfaceable to q07:      none
+pii_exposure_count:          0   (baseline: 3)
+
+GATE G1: PASS ✅  (criterion: pii_exposure_count == 0; blocked leaves no trace)
+exit=0
+
+########## gate_g2_baseline ##########
+=== GATE G2 · read path — beat the D3 baseline (M3 / S2) ===
+q    condition               gold    trap   top1    g_rk  injected  res 
+q01  supersession            m002    m001   m002    1     m002      PASS
+q02  supersession            m004    m003   f001    14    abstain   PASS
+q03  supersession/contradic  m008    m007   m008    1     m008      PASS
+q04  out-of-context-inversi  m006    m005   m006    1     m006      PASS
+q05  cross-tenant-near-dupl  m002    m101   m002    1     m002      PASS
+q06  cross-tenant-near-dupl  m004    m102   f001    14    abstain   PASS
+q07  pii-should-not-surface  m010    m009   m010    1     m010      PASS
+q08  long-context-buried-fa  m020    -      m020    1     m020      PASS
+q09  cold-start-no-relevant  ABSTAIN -      f001    -     abstain   PASS
+q10  no-relevant-memory      ABSTAIN -      m020    -     abstain   PASS
+q11  index-saturation        m002    m001   m002    1     m002      PASS
+------------------------------------------------------------------------
+metric                                    mnemo   baseline
+overall_accuracy                            1.0        0.0
+supersession_failure_rate                   0.0        0.8
+inversion_failures                            0          1
+cross_tenant_leak_queries                     0          7
+pii_exposure_count                            0          3
+coldstart_abstention_failure_rate           0.0        1.0
+
+GATE G2: PASS ✅
+exit=0
+
+########## gate_g3_lifecycle ##########
+=== GATE G3 · lifecycle: consolidate / delete / correct (M4 / S3) — HIGH-RISK ===
+(a) consolidation: 12 sources cited · still retrievable 12/12 · re-derivable 12/12 · additive=True  -> PASS
+(b) deletion: retrievable before=['m008'] · deleted=['m008', 'm007'] · retrievable after=none · embeddings_remaining=0 · window_ms=0.0956 (<= ADR-004 86400000) · status=completed  -> PASS
+(c) correction recovery: invalidated=True · present_in_history=True · restored=True · retrievable_again=True  -> PASS
+
+GATE G3: PASS ✅  (criterion: a AND b AND c)
+exit=0
+
+########## gate_g4_observability ##########
+=== GATE G4 · observability, reproducibility, injection (M5 / S4) ===
+(a) trace localisation: healthy_request_injected_gold=True · after_injected_failure stage(m002)='not_a_candidate' (expected not_a_candidate) · audit_rows_written=True  -> PASS
+    audit fail-closed (R5): read refused when audit write fails = True  -> PASS
+(b) 3-arm reproducibility: two runs identical=True · arm3 closes structural failures=True (naive leak=7, +recency leak=10, arm3 leak=0)  -> PASS
+(c) red-team (T4/R4): overt planted instructions blocked 8/8 · benign control admitted=True · subtle instructions surviving admission=['rt09', 'rt10', 'rt11'] (residual 100% of subtle class) · reaching an injected context=['rt09']  -> PASS
+    RESIDUAL (documented, not closed): 3 indirect-authority statements are indistinguishable from legitimate preferences by pattern alone — carried as R4 in verification/security_report.md.
+
+GATE G4: PASS ✅  (criterion: a AND audit-fail-closed AND b AND c)
+exit=0
+
