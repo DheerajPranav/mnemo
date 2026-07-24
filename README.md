@@ -10,6 +10,10 @@
 
 ---
 
+> 📖 **New here? Read [GUIDE.md](GUIDE.md)** — a plain-English walkthrough of the whole project: what
+> problem it solves, what each of the 8 deliverables is *for*, and exactly which file to open in what
+> order. No jargon assumed.
+
 Mnemo is a **conversational-memory intelligence system**: the layer that lets an AI assistant
 remember what's *true* about an account over time — durable across sessions, **current** (not merely
 recent), **isolated** per tenant, and **safe** with sensitive data.
